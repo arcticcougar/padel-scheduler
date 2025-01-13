@@ -8,22 +8,13 @@ import pandas as pd
 # ---------------------- Helper Functions ----------------------
 
 def initialize_matrices(num_players):
-    """
-    Initializes teammate and opponent matrices with zeros.
-    """
     return (np.zeros((num_players, num_players), dtype=int),
             np.zeros((num_players, num_players), dtype=int))
 
 def initialize_rest_tracker(num_players):
-    """
-    Initializes a rest tracker for players.
-    """
     return np.zeros(num_players, dtype=int)
 
 def evaluate_match(groups, teammate_matrix, opponent_matrix):
-    """
-    Evaluates the total score for a set of groups based on teammate and opponent matrices.
-    """
     total_score = 0
     for group in groups:
         team1, team2 = group[:2], group[2:]
@@ -38,9 +29,6 @@ def evaluate_match(groups, teammate_matrix, opponent_matrix):
 
 def find_best_match(players, num_courts, court_size, teammate_matrix, opponent_matrix,
                    match_number, samples=100_000, show_progress=True):
-    """
-    Finds the best match arrangement by sampling random player groupings.
-    """
     best_match, best_score = None, float('inf')
 
     if show_progress:
@@ -78,9 +66,6 @@ def find_best_match(players, num_courts, court_size, teammate_matrix, opponent_m
     return best_match
 
 def update_matrices_for_match(groups, teammate_matrix, opponent_matrix):
-    """
-    Updates the teammate and opponent matrices based on the groups in a match.
-    """
     for group in groups:
         team1, team2 = group[:2], group[2:]
         for i, j in itertools.combinations(team1, 2):
@@ -95,22 +80,13 @@ def update_matrices_for_match(groups, teammate_matrix, opponent_matrix):
                 opponent_matrix[j][i] += 1
 
 def select_bench_players(players, rest_tracker, num_benched):
-    """
-    Selects players to bench based on their rest counts.
-    """
     return sorted(players, key=lambda x: rest_tracker[x])[:num_benched]
 
 def determine_courts_to_use(num_players, available_courts, court_size=4):
-    """
-    Determines the number of courts to use based on the number of players and available courts.
-    """
     max_full_courts = num_players // court_size
     return min(available_courts, max_full_courts)
 
 def deduplicate_names(name_list):
-    """
-    Removes duplicates from the name list by appending a count suffix.
-    """
     seen = {}
     result = []
     for name in name_list:
@@ -128,11 +104,6 @@ def deduplicate_names(name_list):
     return result
 
 def format_match_table_html(match_number, best_match, court_names, player_names, bench_players):
-    """
-    Formats the match information into a styled HTML structure with advanced CSS for a modern look.
-    Reduces whitespace between matches.
-    """
-    # Define a container for the match with reduced margin-bottom
     match_html = f"""
     <div style="margin-bottom: 20px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05); border-radius: 8px; overflow: hidden; background-color: #ffffff;">
         <div style="padding: 10px;">
@@ -148,7 +119,6 @@ def format_match_table_html(match_number, best_match, court_names, player_names,
                 </thead>
                 <tbody>
     """
-    # Add each court's match with reduced padding
     for court_id, group in enumerate(best_match):
         team1 = " & ".join([player_names[p] for p in group[:2]])
         team2 = " & ".join([player_names[p] for p in group[2:]])
@@ -162,8 +132,6 @@ def format_match_table_html(match_number, best_match, court_names, player_names,
                         <td style="padding: 6px; border-bottom: 1px solid #ddd;">{team2}</td>
                     </tr>
         """
-
-    # Add the resting players
     resting = ", ".join([player_names[p] for p in bench_players])
     match_html += f"""
                 </tbody>
@@ -179,9 +147,6 @@ def format_match_table_html(match_number, best_match, court_names, player_names,
     return match_html
 
 def format_statistics_html(stats, date_str_uk):
-    """
-    Formats the statistics information into a styled HTML structure.
-    """
     stats_html = f"""
     <!DOCTYPE html>
     <html lang="en">
@@ -247,9 +212,6 @@ def format_statistics_html(stats, date_str_uk):
 
 def assign_matches(player_names, court_names, court_size=4, total_matches=8,
                    samples=100_000, show_progress=True):
-    """
-    Assigns players to matches across multiple courts and generates the schedule output.
-    """
     num_players = len(player_names)
     available_courts = len(court_names)
     courts_to_use = determine_courts_to_use(num_players, available_courts, court_size)
@@ -288,9 +250,6 @@ def assign_matches(player_names, court_names, court_size=4, total_matches=8,
     return "".join(schedule_output), teammate_matrix, opponent_matrix, rest_tracker
 
 def generate_Schedule_Statistics(teammate_matrix, opponent_matrix, rest_tracker, player_names):
-    """
-    Generates statistics based on the matches scheduled.
-    """
     output = []
     teammate_total, opponent_total = 0, 0
     teammate_frequencies, opponent_frequencies = {}, {}
@@ -332,7 +291,15 @@ def main():
         st.session_state["show_results"] = False
     if "date_str_uk" not in st.session_state:
         st.session_state["date_str_uk"] = ""
-
+        
+    ## ADDED OR MODIFIED ##
+    # 1. Track the player's selection order
+    if "player_selection_order" not in st.session_state:
+        st.session_state["player_selection_order"] = {}
+    if "player_counter" not in st.session_state:
+        st.session_state["player_counter"] = 1
+    ## ----------------- ##
+    
     # Page Configuration
     st.set_page_config(page_title="Mijas Padellers Match Scheduler", layout="centered", initial_sidebar_state="auto")
     
@@ -344,7 +311,6 @@ def main():
         </style>
         """, unsafe_allow_html=True)
 
-    # Title without Emoji
     st.title("Mijas Padellers Match Scheduler")
 
     # Date Selection
@@ -352,7 +318,7 @@ def main():
     formatted_date = session_date.strftime("%A %d %B %Y")
     st.write("Selected date:", formatted_date)
 
-    # Regular Players List
+    # Regular Players List (No longer sorted alphabetically)
     REGULAR_PLAYERS = [
         "Agneta", "Anna", "Anny", "Bevan", "Bill", "Chris", "Christine", "Cris Burgos",
         "Daryoush", "Declan", "Dee", "Evgen", "Fabian", "Geordie", "Glynis", "Heather",
@@ -361,34 +327,55 @@ def main():
         "Paul", "Ruth", "Sandy", "Scott", "Sharon", "Soraya", "Tania", "Tony", "Travis",
         "Walker", "Wendy"
     ]
-    REGULAR_PLAYERS.sort(key=lambda x: x.lower())
 
     # Select Regular Players
     st.header("👥 Select Regular Players")
+    
+    ## ADDED OR MODIFIED ##
+    # Show each player with a checkbox, but track the order they are selected
     selected_regular_players = []
     cols_players = st.columns(4)
     for i, player in enumerate(REGULAR_PLAYERS):
         col = cols_players[i % 4]
-        if col.checkbox(player, key=f"player_{player}{i}"):
-            selected_regular_players.append(player)
+        selected = col.checkbox(player, key=f"player_{player}{i}", value=False)
 
-    # Add Guest Players
-    st.header("➕ Add Up to 8 Guest Players (optional)")
-    guest_players = []
-    cols_guest = st.columns(4)
-    for i in range(8):
-        col = cols_guest[i % 4]
-        guest_name = col.text_input(f"Guest Player {i+1}", key=f"guest_player_{i+1}")
-        if guest_name.strip():
-            guest_players.append(guest_name.strip())
+        if selected:
+            # If the player is checked, assign them an order if they don't have one
+            if st.session_state["player_selection_order"].get(player) is None:
+                st.session_state["player_selection_order"][player] = st.session_state["player_counter"]
+                st.session_state["player_counter"] += 1
+        else:
+            # If unchecked, remove their order
+            st.session_state["player_selection_order"][player] = None
+
+    # After building the checkboxes, collect players in the order they were checked
+    for player in REGULAR_PLAYERS:
+        order = st.session_state["player_selection_order"].get(player)
+        if order is not None:
+            selected_regular_players.append((player, order))
+
+    # Sort by the numeric order assigned, then extract names only
+    selected_regular_players.sort(key=lambda x: x[1])
+    selected_regular_players = [p[0] for p in selected_regular_players]
+    ## ----------------- ##
+
+    # Make the Guest Players section collapsible
+    with st.expander("➕ Add Up to 8 Guest Players (optional)", expanded=False):
+        guest_players = []
+        cols_guest = st.columns(4)
+        for i in range(8):
+            col = cols_guest[i % 4]
+            guest_name = col.text_input(f"Guest Player {i+1}", key=f"guest_player_{i+1}")
+            if guest_name.strip():
+                guest_players.append(guest_name.strip())
 
     # Combine and Deduplicate Player Names
     raw_player_names = selected_regular_players + guest_players
     player_names = deduplicate_names(raw_player_names)
 
-    # Display Final Player List as Numbered Markdown List Starting at 1
+    # Display Final Player List as Numbered Markdown
     st.write("---")
-    st.markdown("**📋 Final Player List:**")
+    st.markdown("**📋 Final Player List (players rested in order of selection):**")
     if player_names:
         player_markdown = ""
         for idx, player in enumerate(player_names, start=1):
@@ -396,6 +383,16 @@ def main():
         st.markdown(player_markdown)
     else:
         st.write("No players selected.")
+
+    # Make the Custom Courts section collapsible
+    with st.expander("➕ Add Up to 4 Custom Courts (optional)", expanded=False):
+        custom_courts = []
+        cols_custom = st.columns(4)
+        for i in range(4):
+            col = cols_custom[i]
+            c_court = col.text_input(f"Custom Court {i+1}", key=f"custom_court_{i+1}")
+            if c_court.strip():
+                custom_courts.append(c_court.strip())
 
     # Select Regular Courts
     st.header("🎾 Select Regular Courts")
@@ -407,17 +404,7 @@ def main():
         if col.checkbox(court, key=f"court_{court}{i}"):
             selected_regular_courts.append(court)
 
-    # Add Custom Courts
-    st.header("➕ Add Up to 4 Custom Courts (optional)")
-    custom_courts = []
-    cols_custom = st.columns(4)
-    for i in range(4):
-        col = cols_custom[i]
-        c_court = col.text_input(f"Custom Court {i+1}", key=f"custom_court_{i+1}")
-        if c_court.strip():
-            custom_courts.append(c_court.strip())
-
-    # Combine Final Court List as Numbered Markdown List Starting at 1
+    # Combine Final Court List
     court_names = selected_regular_courts + custom_courts
     st.write("---")
     st.markdown("**🏟️ Final Court List:**")
@@ -439,16 +426,15 @@ def main():
 
     samples = st.number_input(
         "🔍 How many random samples to try? (WARNING: large values can be slow)",
-        min_value=1000,
-        value=100_000,
-        step=1000
+        min_value=100_000,
+        value=250_000,
+        step=50_000
     )
 
     # Additional Options
     show_progress = st.checkbox("📈 Show detailed progress updates (every 10,000 samples)", value=True)
     show_stats = st.checkbox("📊 Show Schedule Statistics", value=False)
 
-    # Generate Schedule Button
     if st.button("📅 Generate Schedule"):
         if len(player_names) < 4:
             st.error("🚫 Need at least 4 players to schedule a match.")
@@ -467,11 +453,9 @@ def main():
                 show_progress=show_progress
             )
 
-        # Format the date as "Monday 13 January 2025"
         date_str_uk = session_date.strftime("%A %d %B %Y")
         st.session_state["date_str_uk"] = date_str_uk
 
-        # Assemble the complete HTML document with reduced whitespace and separate subtitle
         schedule_html = f"""
         <!DOCTYPE html>
         <html lang="en">
@@ -552,7 +536,6 @@ def main():
 
         if show_stats:
             stats = generate_Schedule_Statistics(teammate_matrix, opponent_matrix, rest_tracker, player_names)
-            # Assemble statistics HTML with separate subtitle
             stats_html = format_statistics_html(stats, date_str_uk)
             st.session_state["stats_html"] = stats_html
         else:
@@ -560,13 +543,10 @@ def main():
 
         st.session_state["show_results"] = True
 
-    # Display Download Buttons
     if st.session_state["show_results"]:
         st.subheader("📥 Download Your Schedule")
-        # Retrieve date_str_uk from session_state
         date_str_uk = st.session_state.get("date_str_uk", "Schedule")
 
-        # Download Schedule as HTML
         schedule_filename = f"Schedule_{date_str_uk.replace(' ', '_')}.html"
         st.download_button(
             label="📄 Download Schedule HTML",
@@ -575,7 +555,6 @@ def main():
             mime="text/html"
         )
 
-        # Display and Download Statistics if Enabled
         if st.session_state["stats_html"]:
             st.subheader("📥 Download Schedule Statistics")
             stats_filename = f"Schedule_Statistics_{date_str_uk.replace(' ', '_')}.html"
@@ -586,10 +565,7 @@ def main():
                 mime="text/html"
             )
 
-        # Divider
         st.divider()
-
-# ---------------------- Run the App ----------------------
 
 if __name__ == "__main__":
     main()
