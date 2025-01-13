@@ -23,7 +23,7 @@ def evaluate_match(groups, teammate_matrix, opponent_matrix):
         opponent_score = sum(opponent_matrix[i][j] for i in team1 for j in team2)
         diversity_penalty = sum(1 if teammate_matrix[i][j] > 0 else 0 for i, j in itertools.combinations(team1, 2)) + \
                             sum(1 if teammate_matrix[i][j] > 0 else 0 for i, j in itertools.combinations(team2, 2)) + \
-                            sum(1 if opponent_matrix[i][j] > 0 else 0 for i in team1 for j in team2)
+                            sum(1 if opponent_matrix[i][j] > 0 else 0 for i, j in itertools.combinations(team1, 2) for j in team2)
         total_score += teammate_score + opponent_score + diversity_penalty
     return total_score
 
@@ -384,16 +384,6 @@ def main():
     else:
         st.write("No players selected.")
 
-    # Make the Custom Courts section collapsible
-    with st.expander("➕ Add Up to 4 Custom Courts (optional)", expanded=False):
-        custom_courts = []
-        cols_custom = st.columns(4)
-        for i in range(4):
-            col = cols_custom[i]
-            c_court = col.text_input(f"Custom Court {i+1}", key=f"custom_court_{i+1}")
-            if c_court.strip():
-                custom_courts.append(c_court.strip())
-
     # Select Regular Courts
     st.header("🎾 Select Regular Courts")
     REGULAR_COURTS = [f"Court {i}" for i in range(1, 17)]
@@ -403,6 +393,16 @@ def main():
         col = cols_courts[i % 4]
         if col.checkbox(court, key=f"court_{court}{i}"):
             selected_regular_courts.append(court)
+
+    # Make the Custom Courts section collapsible and place it above the Final Court List
+    with st.expander("➕ Add Up to 4 Custom Courts (optional)", expanded=False):
+        custom_courts = []
+        cols_custom = st.columns(4)
+        for i in range(4):
+            col = cols_custom[i]
+            c_court = col.text_input(f"Custom Court {i+1}", key=f"custom_court_{i+1}")
+            if c_court.strip():
+                custom_courts.append(c_court.strip())
 
     # Combine Final Court List
     court_names = selected_regular_courts + custom_courts
@@ -427,7 +427,7 @@ def main():
     samples = st.number_input(
         "🔍 How many random samples to try? (WARNING: large values can be slow)",
         min_value=100_000,
-        value=250_000,
+        value=200_000,
         step=50_000
     )
 
