@@ -77,7 +77,7 @@ def evaluate_match(groups, teammate_matrix, opponent_matrix, reject_mixed, playe
                 if available_pool.count('F') >= court_size or available_pool.count('M') >= court_size:
                     total_score += 1000
 
-    # NEW: If match_history is provided, penalize any group that has been used before.
+    # Penalize repeated match-ups heavily.
     if match_history is not None:
         for group in groups:
             config = canonical_config(group)
@@ -186,7 +186,8 @@ def format_match_table_html(match_number, best_match, court_names, player_names,
           </tbody>
           <tfoot>
             <tr>
-              <td colspan="4" style="padding: 6px; background-color: #f0f0f0; font-weight: bold;">Resting: {resting_names}</td>
+              <td style="width: 20%; padding: 6px; background-color: #f0f0f0; font-weight: bold;">Resting</td>
+              <td style="width: 80%; padding: 6px; background-color: #f0f0f0;" colspan="3">{resting_names}</td>
             </tr>
           </tfoot>
         </table>
@@ -353,10 +354,16 @@ def format_debug_schedule_html(all_matches_info, final_player_genders, final_pla
             resting_names = ", ".join([f"{player_names[p]} ({final_player_skills[p]})" for p in bench_players])
         else:
             resting_names = "None"
+        # NEW: Resting row with 2 columns: first 15% "Resting", second 85% with resting players.
         debug_html += f"""
             </tbody>
+            <tfoot>
+              <tr>
+                <td style="width: 15%; padding: 6px; background-color: #f0f0f0; font-weight: bold;">Resting</td>
+                <td style="width: 85%; padding: 6px; background-color: #f0f0f0;" colspan="5">{resting_names}</td>
+              </tr>
+            </tfoot>
           </table>
-          <p style="font-weight: bold;">Resting: {resting_names}</p>
         </div>
         """
     return debug_html
@@ -381,12 +388,14 @@ def build_player_schedule_table(all_matches_info, player_names, court_names):
         table_html += "<tr>"
         table_html += f'<td style="padding: 6px; border-bottom: 1px solid #ddd;">{pname}</td>'
         for (best_match, bench_players) in all_matches_info:
-            assigned = "Rest"
-            if idx not in bench_players:
+            assigned = "Rest" if idx in bench_players else None
+            if not assigned:
                 for court_index, group in enumerate(best_match):
                     if idx in group:
                         assigned = court_names[court_index] if court_index < len(court_names) else ""
                         break
+            if assigned == "Rest":
+                assigned = "<b>Rest</b>"
             table_html += f'<td style="padding: 6px; border-bottom: 1px solid #ddd; text-align: center;">{assigned}</td>'
         table_html += "</tr>"
     table_html += "</tbody></table>"
@@ -403,8 +412,9 @@ def assign_matches(player_names, player_genders, player_skills, court_names, cou
     players = list(range(num_players))
     schedule_output = []
     all_matches_info = []
-    # NEW: Maintain a set of canonical configurations that have already been used
+    # Maintain a set of canonical configurations that have already been used
     match_history = set()
+
     for match_number in range(total_matches):
         st.info(f"--- Assigning players for Match {match_number+1} ---")
         total_court_capacity = courts_to_use * court_size
@@ -413,15 +423,21 @@ def assign_matches(player_names, player_genders, player_skills, court_names, cou
         available_players = [p for p in players if p not in bench_players]
 
         best_match = find_best_match(
-            available_players, courts_to_use, court_size,
-            teammate_matrix, opponent_matrix,
-            match_number, samples=samples,
-            reject_mixed=reject_mixed, player_genders=player_genders,
-            enable_skill=enable_skill, player_skills=player_skills,
-            skill_weight=skill_weight, match_history=match_history
+            available_players,
+            courts_to_use,
+            court_size,
+            teammate_matrix,
+            opponent_matrix,
+            match_number,
+            samples=samples,
+            reject_mixed=reject_mixed,
+            player_genders=player_genders,
+            enable_skill=enable_skill,
+            player_skills=player_skills,
+            skill_weight=skill_weight,
+            match_history=match_history
         )
         if best_match:
-            # NEW: For each court configuration chosen in this match, add its canonical form to match_history
             for group in best_match:
                 config = canonical_config(group)
                 match_history.add(config)
@@ -432,6 +448,7 @@ def assign_matches(player_names, player_genders, player_skills, court_names, cou
             st.success(f"Match {match_number+1} assigned successfully.")
             for bp in bench_players:
                 rest_tracker[bp] += 1
+
     return "".join(schedule_output), teammate_matrix, opponent_matrix, rest_tracker, all_matches_info
 
 def generate_Schedule_Statistics(teammate_matrix, opponent_matrix, rest_tracker, player_names,
@@ -490,7 +507,6 @@ def generate_Schedule_Statistics(teammate_matrix, opponent_matrix, rest_tracker,
     base_html = format_statistics_html(full_stats_text, st.session_state["date_str_uk"], all_matches_info, final_player_genders)
     debug_schedule = format_debug_schedule_html(all_matches_info, final_player_genders, final_player_skills, player_names, court_names)
     player_schedule = build_player_schedule_table(all_matches_info, player_names, court_names)
-
     final_html = base_html.replace(
         "</body>",
         f"{debug_schedule}<div style='page-break-before: always;'>{player_schedule}</div></body>"
@@ -676,6 +692,9 @@ def main():
     max_unique = compute_max_unique_matchups(num_players_selected, courts_used, 4) if num_players_selected >= courts_used * 4 else 0
 
     st.header("⚙️ Configuration")
+    total_matches = st.number_input("🔢 How many matches do you want to schedule?", min_value=1, value=8)
+    num_schedules = st.number_input("🗂 How many schedules do you want to generate?", min_value=1, value=1)
+
     default_samples = int(min(max_unique, 200000)) if max_unique else 200000
     samples = st.number_input(
         "🔍 Number of random combinations to try (larger = better results but takes longer to run)",
@@ -685,8 +704,8 @@ def main():
     )
     st.info(f"Approx. unique combinations: {int(max_unique):,}")
 
-    reject_mixed = st.checkbox("🏳️‍🌈 Same-Sex Court Filling", value=True)
-    enable_skill = st.checkbox("🎯 Skill-based Matchups", value=True)
+    reject_mixed = st.checkbox("🏳️‍🌈 Prefer Same-Sex Play", value=True)
+    enable_skill = st.checkbox("🎯 Skill-based Matches", value=True)
     with st.expander("⚖️ Skill Penalty Weight", expanded=False):
         skill_weight = st.number_input("Enter skill penalty weight", min_value=1, value=20)
 
@@ -702,24 +721,35 @@ def main():
         st.session_state["all_stats"].clear()
         st.session_state["date_str_uk"] = formatted_date
 
-        num_schedules = 1
         with st.spinner("🔄 Generating schedule..."):
             for i in range(num_schedules):
                 st.info(f"Generating Schedule {i+1} of {num_schedules}...")
-                # NEW: Initialize match history to track previously used configurations.
                 schedule_output, teammate_matrix, opponent_matrix, rest_tracker, all_matches_info = assign_matches(
                     player_names=player_names_no_gender,
                     player_genders=final_player_genders,
                     player_skills=final_player_skills,
                     court_names=court_names,
                     court_size=4,
-                    total_matches=8,
+                    total_matches=total_matches,
                     samples=samples,
                     reject_mixed=reject_mixed,
                     enable_skill=enable_skill,
                     skill_weight=skill_weight
                 )
                 player_schedule_table = build_player_schedule_table(all_matches_info, player_names_no_gender, court_names)
+                
+                # Insert page breaks after every 4 match blocks, but avoid a trailing break if total matches is divisible by 4.
+                match_marker = '<div style="margin-bottom: 10px; box-shadow:'
+                match_blocks = schedule_output.split(match_marker)
+                if match_blocks[0].strip() == "":
+                    match_blocks = match_blocks[1:]
+                modified_schedule_output = ""
+                for index, block in enumerate(match_blocks):
+                    modified_schedule_output += match_marker + block
+                    # Insert a page break after every 4 blocks, unless this is the last block.
+                    if (index + 1) % 4 == 0 and (index + 1) < len(match_blocks):
+                        modified_schedule_output += "<div style='page-break-after: always;'></div>"
+                
                 schedule_html = f"""
                 <!DOCTYPE html>
                 <html lang="en">
@@ -791,7 +821,7 @@ def main():
                     <div class="container">
                         <h1>Mijas Padellers Match Schedule</h1>
                         <h2>{formatted_date}</h2>
-                        {schedule_output}
+                        {modified_schedule_output}
                         <hr>
                         <div style="page-break-before: always;">{player_schedule_table}</div>
                     </div>
