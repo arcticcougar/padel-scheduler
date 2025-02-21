@@ -587,16 +587,16 @@ def main():
         n_players = len(REGULAR_PLAYERS)
         num_per_col_skill = math.ceil(n_players / num_cols_skill)
         cols_skill = st.columns(num_cols_skill)
-        # To preserve alphabetical order in column-major order:
-        for row in range(num_per_col_skill):
-            for col in range(num_cols_skill):
-                index = col * num_per_col_skill + row
-                if index < n_players:
-                    new_val = st.number_input(f"{REGULAR_PLAYERS[index]['name']}",
-                                              min_value=1, max_value=10,
-                                              value=REGULAR_PLAYERS[index]['skill'],
-                                              key=f"skill_{REGULAR_PLAYERS[index]['name']}")
-                    REGULAR_PLAYERS[index]['skill'] = new_val
+        for col_idx in range(num_cols_skill):
+            with cols_skill[col_idx]:
+                for row_idx in range(num_per_col_skill):
+                    index = col_idx * num_per_col_skill + row_idx
+                    if index < n_players:
+                        new_val = st.number_input(f"{REGULAR_PLAYERS[index]['name']}",
+                                                  min_value=1, max_value=10,
+                                                  value=REGULAR_PLAYERS[index]['skill'],
+                                                  key=f"skill_{REGULAR_PLAYERS[index]['name']}")
+                        REGULAR_PLAYERS[index]['skill'] = new_val
 
     num_cols = 4
     n_players = len(REGULAR_PLAYERS)
@@ -659,10 +659,10 @@ def main():
         final_player_genders.append(ggender)
         final_player_skills.append(gskill)
 
-    # Check for duplicates based on the base name (ignoring any gender symbols)
+    # Check for duplicates based on base names (ignoring gender symbols)
     base_names = [name.strip().lower() for name in raw_player_names_no_gender]
     if len(set(base_names)) < len(base_names):
-        st.error("Duplicate player names detected. Please ensure all player names are unique.")
+        st.error("Duplicate player names detected (ignoring gender symbols). Please ensure all player names are unique.")
         st.stop()
 
     player_names_with_gender = deduplicate_names(raw_player_names_with_gender)
@@ -762,7 +762,7 @@ def main():
                 )
                 player_schedule_table = build_player_schedule_table(all_matches_info, player_names_no_gender, court_names)
                 
-                # Insert page breaks after every 4 match blocks, but avoid a trailing page break.
+                # Insert page breaks after every 4 match blocks, but avoid a trailing break if total matches divides evenly.
                 match_marker = '<div style="margin-bottom: 10px; box-shadow:'
                 match_blocks = schedule_output.split(match_marker)
                 if match_blocks[0].strip() == "":
