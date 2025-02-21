@@ -354,7 +354,7 @@ def format_debug_schedule_html(all_matches_info, final_player_genders, final_pla
             resting_names = ", ".join([f"{player_names[p]} ({final_player_skills[p]})" for p in bench_players])
         else:
             resting_names = "None"
-        # NEW: Resting row with 2 columns: first 15% "Resting", second 85% with resting players.
+        # Resting row with 2 columns: first 15% "Resting", second 85% spanning remaining columns.
         debug_html += f"""
             </tbody>
             <tfoot>
@@ -580,6 +580,24 @@ def main():
     REGULAR_PLAYERS = sorted(REGULAR_PLAYERS, key=lambda x: x["name"])
 
     st.header("👥 Select Regular Players")
+    # NEW: Collapsible expander for adjusting regular player skill levels (temporary).
+    with st.expander("⚙️ Adjust Regular Player Skill Levels (temporary). Speak to Scott for permanent changes.", expanded=False):
+        st.write("Modify skill levels for each regular player:")
+        num_cols_skill = 4
+        n_players = len(REGULAR_PLAYERS)
+        num_per_col_skill = math.ceil(n_players / num_cols_skill)
+        cols_skill = st.columns(num_cols_skill)
+        # To preserve alphabetical order in column-major order:
+        for row in range(num_per_col_skill):
+            for col in range(num_cols_skill):
+                index = col * num_per_col_skill + row
+                if index < n_players:
+                    new_val = st.number_input(f"{REGULAR_PLAYERS[index]['name']}",
+                                              min_value=1, max_value=10,
+                                              value=REGULAR_PLAYERS[index]['skill'],
+                                              key=f"skill_{REGULAR_PLAYERS[index]['name']}")
+                    REGULAR_PLAYERS[index]['skill'] = new_val
+
     num_cols = 4
     n_players = len(REGULAR_PLAYERS)
     num_per_col = math.ceil(n_players / num_cols)
@@ -640,6 +658,12 @@ def main():
         raw_player_names_no_gender.append(gname)
         final_player_genders.append(ggender)
         final_player_skills.append(gskill)
+
+    # Check for duplicates based on the base name (ignoring any gender symbols)
+    base_names = [name.strip().lower() for name in raw_player_names_no_gender]
+    if len(set(base_names)) < len(base_names):
+        st.error("Duplicate player names detected. Please ensure all player names are unique.")
+        st.stop()
 
     player_names_with_gender = deduplicate_names(raw_player_names_with_gender)
     player_names_no_gender = deduplicate_names(raw_player_names_no_gender)
@@ -738,7 +762,7 @@ def main():
                 )
                 player_schedule_table = build_player_schedule_table(all_matches_info, player_names_no_gender, court_names)
                 
-                # Insert page breaks after every 4 match blocks, but avoid a trailing break if total matches is divisible by 4.
+                # Insert page breaks after every 4 match blocks, but avoid a trailing page break.
                 match_marker = '<div style="margin-bottom: 10px; box-shadow:'
                 match_blocks = schedule_output.split(match_marker)
                 if match_blocks[0].strip() == "":
@@ -746,7 +770,6 @@ def main():
                 modified_schedule_output = ""
                 for index, block in enumerate(match_blocks):
                     modified_schedule_output += match_marker + block
-                    # Insert a page break after every 4 blocks, unless this is the last block.
                     if (index + 1) % 4 == 0 and (index + 1) < len(match_blocks):
                         modified_schedule_output += "<div style='page-break-after: always;'></div>"
                 
