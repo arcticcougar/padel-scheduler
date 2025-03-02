@@ -354,7 +354,6 @@ def format_debug_schedule_html(all_matches_info, final_player_genders, final_pla
             resting_names = ", ".join([f"{player_names[p]} ({final_player_skills[p]})" for p in bench_players])
         else:
             resting_names = "None"
-        # Resting row with 2 columns: first 15% "Resting", second 85% spanning remaining columns.
         debug_html += f"""
             </tbody>
             <tfoot>
@@ -402,7 +401,7 @@ def build_player_schedule_table(all_matches_info, player_names, court_names):
     return table_html
 
 def assign_matches(player_names, player_genders, player_skills, court_names, court_size=4,
-                   total_matches=8, samples=100000, reject_mixed=False,
+                   total_matches=6, samples=100000, reject_mixed=False,
                    enable_skill=False, skill_weight=20):
     num_players = len(player_names)
     available_courts = len(court_names)
@@ -531,6 +530,7 @@ def main():
     formatted_date = session_date.strftime("%A %d %B %Y")
     st.write("Selected date:", formatted_date)
 
+    # Updated REGULAR_PLAYERS list: Julie and Juan removed, Lilli and Roger added.
     REGULAR_PLAYERS = [
         {"name": "Agneta", "gender": "F", "skill": 5},
         {"name": "Anna", "gender": "F", "skill": 4},
@@ -551,9 +551,7 @@ def main():
         {"name": "Janet", "gender": "F", "skill": 5},
         {"name": "John", "gender": "M", "skill": 7},
         {"name": "Joyce", "gender": "F", "skill": 5},
-        {"name": "Juan", "gender": "M", "skill": 7},
         {"name": "Julia", "gender": "F", "skill": 4},
-        {"name": "Julie", "gender": "F", "skill": 4},
         {"name": "Kevan", "gender": "M", "skill": 5},
         {"name": "Leah", "gender": "F", "skill": 4},
         {"name": "Linda", "gender": "F", "skill": 5},
@@ -575,7 +573,9 @@ def main():
         {"name": "Tony", "gender": "M", "skill": 7},
         {"name": "Travis", "gender": "M", "skill": 7},
         {"name": "Walker", "gender": "M", "skill": 7},
-        {"name": "Wendy", "gender": "F", "skill": 4}
+        {"name": "Wendy", "gender": "F", "skill": 4},
+        {"name": "Lilli", "gender": "F", "skill": 4},
+        {"name": "Roger", "gender": "M", "skill": 6}
     ]
     REGULAR_PLAYERS = sorted(REGULAR_PLAYERS, key=lambda x: x["name"])
 
@@ -716,7 +716,7 @@ def main():
     max_unique = compute_max_unique_matchups(num_players_selected, courts_used, 4) if num_players_selected >= courts_used * 4 else 0
 
     st.header("⚙️ Configuration")
-    total_matches = st.number_input("🔢 How many matches do you want to schedule?", min_value=1, value=8)
+    total_matches = st.number_input("🔢 How many matches do you want to schedule?", min_value=1, value=6)
     num_schedules = st.number_input("🗂 How many schedules do you want to generate?", min_value=1, value=1)
 
     default_samples = int(min(max_unique, 200000)) if max_unique else 200000
@@ -762,7 +762,7 @@ def main():
                 )
                 player_schedule_table = build_player_schedule_table(all_matches_info, player_names_no_gender, court_names)
                 
-                # Insert page breaks after every 4 match blocks, but avoid a trailing break if total matches divides evenly.
+                # Insert page breaks after every 3 match blocks, but avoid a trailing break if total matches divides evenly.
                 match_marker = '<div style="margin-bottom: 10px; box-shadow:'
                 match_blocks = schedule_output.split(match_marker)
                 if match_blocks[0].strip() == "":
@@ -770,7 +770,7 @@ def main():
                 modified_schedule_output = ""
                 for index, block in enumerate(match_blocks):
                     modified_schedule_output += match_marker + block
-                    if (index + 1) % 4 == 0 and (index + 1) < len(match_blocks):
+                    if (index + 1) % 3 == 0 and (index + 1) < len(match_blocks):
                         modified_schedule_output += "<div style='page-break-after: always;'></div>"
                 
                 schedule_html = f"""
