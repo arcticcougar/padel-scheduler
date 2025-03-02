@@ -728,7 +728,7 @@ def main():
     )
     st.info(f"Approx. unique combinations: {int(max_unique):,}")
 
-    reject_mixed = st.checkbox("🏳️‍🌈 Prefer Same-Sex Play", value=True)
+    reject_mixed = st.checkbox("🏳️‍🌈 Prefer Same-Sex Play", value=False)
     enable_skill = st.checkbox("🎯 Skill-based Matches", value=True)
     with st.expander("⚖️ Skill Penalty Weight", expanded=False):
         skill_weight = st.number_input("Enter skill penalty weight", min_value=1, value=20)
