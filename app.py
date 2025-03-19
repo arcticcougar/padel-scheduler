@@ -558,7 +558,7 @@ def main():
         {"name": "Kevan", "gender": "M", "skill": 5},
         {"name": "Kim", "gender": "F", "skill": 4},        
         {"name": "Leah", "gender": "F", "skill": 4},
-        {"name": "Linda", "gender": "F", "skill": 5},
+        {"name": "Linda", "gender": "F", "skill": 6},
         {"name": "Lindsey", "gender": "F", "skill": 5},
         {"name": "Lynn", "gender": "F", "skill": 4},
         {"name": "Lynsey", "gender": "F", "skill": 4},
