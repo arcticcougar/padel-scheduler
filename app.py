@@ -532,6 +532,7 @@ def main():
 
     # Updated REGULAR_PLAYERS list: Julie and Juan removed, Lilli and Roger added.
     REGULAR_PLAYERS = [
+        {"name": "Asmo", "gender": "M", "skill": 5},
         {"name": "Agneta", "gender": "F", "skill": 5},
         {"name": "Anna", "gender": "F", "skill": 4},
         {"name": "Anny", "gender": "F", "skill": 5},
@@ -566,6 +567,7 @@ def main():
         {"name": "Maxine", "gender": "F", "skill": 5},
         {"name": "Mike", "gender": "M", "skill": 7},
         {"name": "Norman", "gender": "M", "skill": 6},
+        {"name": "Outi", "gender": "F", "skill": 5},
         {"name": "Paola", "gender": "F", "skill": 4},
         {"name": "Paul", "gender": "M", "skill": 7},
         {"name": "Ruth", "gender": "F", "skill": 4},
