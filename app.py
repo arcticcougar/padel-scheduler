@@ -48,16 +48,15 @@ def canonical_config(group):
     return tuple(sorted([team1, team2]))
 
 def evaluate_match(groups, teammate_matrix, opponent_matrix, reject_mixed, player_genders,
-                   available_players, court_size, enable_skill, player_skills, skill_weight, match_history=None):
+                   available_players, court_size, enable_skill, player_skills, skill_weight, match_history=None,
+                   forced_pair_indices=None):
     total_score = 0
     for group in groups:
         team1, team2 = group[:2], group[2:]
         teammate_score = sum(teammate_matrix[i][j] for i, j in itertools.combinations(team1, 2)) + \
                          sum(teammate_matrix[i][j] for i, j in itertools.combinations(team2, 2))
         opponent_score = sum(opponent_matrix[i][j] for i, j in itertools.product(team1, team2))
-        diversity_penalty = sum(teammate_matrix[i][j] for i, j in itertools.combinations(team1, 2)) + \
-                            sum(teammate_matrix[i][j] for i, j in itertools.combinations(team2, 2)) + \
-                            sum(opponent_matrix[i][j] for i, j in itertools.product(team1, team2))
+        diversity_penalty = teammate_score + opponent_score
         total_score += (teammate_score + opponent_score + diversity_penalty)
 
     if enable_skill:
@@ -77,18 +76,37 @@ def evaluate_match(groups, teammate_matrix, opponent_matrix, reject_mixed, playe
                 if available_pool.count('F') >= court_size or available_pool.count('M') >= court_size:
                     total_score += 1000
 
-    # Penalize repeated match-ups heavily.
     if match_history is not None:
         for group in groups:
             config = canonical_config(group)
             if config in match_history:
                 total_score += 10000
 
+    # NEW: Force Outi and Asmo to play together if the option is enabled.
+    if forced_pair_indices is not None:
+        forced_a, forced_b = forced_pair_indices
+        found = False
+        for group in groups:
+            # Check if both forced players are in this group.
+            if forced_a in group and forced_b in group:
+                found = True
+                # Ensure they are on the same side (i.e. both in team1 or both in team2).
+                idx_a = group.index(forced_a)
+                idx_b = group.index(forced_b)
+                if not ((idx_a < 2 and idx_b < 2) or (idx_a >= 2 and idx_b >= 2)):
+                    total_score += 10000  # heavy penalty if on opposite teams
+                break
+        # If both forced players are in play (available) but not assigned together, add penalty.
+        all_players_in_groups = set(p for group in groups for p in group)
+        if forced_a in all_players_in_groups and forced_b in all_players_in_groups and not found:
+            total_score += 10000
+
     return total_score
 
 def find_best_match(players, num_courts, court_size, teammate_matrix, opponent_matrix,
                     match_number, samples=100000, reject_mixed=False,
-                    player_genders=None, enable_skill=False, player_skills=None, skill_weight=20, match_history=None):
+                    player_genders=None, enable_skill=False, player_skills=None, skill_weight=20, match_history=None,
+                    forced_pair_indices=None):
     best_match, best_score = None, float('inf')
     progress_bar = st.progress(0)
     status_text = st.empty()
@@ -99,9 +117,20 @@ def find_best_match(players, num_courts, court_size, teammate_matrix, opponent_m
         if len(set(itertools.chain(*groups))) != len(players):
             continue
 
-        score = evaluate_match(groups, teammate_matrix, opponent_matrix,
-                               reject_mixed, player_genders, players,
-                               court_size, enable_skill, player_skills, skill_weight, match_history=match_history)
+        score = evaluate_match(
+            groups,
+            teammate_matrix,
+            opponent_matrix,
+            reject_mixed,
+            player_genders,
+            players,
+            court_size,
+            enable_skill,
+            player_skills,
+            skill_weight,
+            match_history=match_history,
+            forced_pair_indices=forced_pair_indices
+        )
 
         if score < best_score:
             best_score, best_match = score, groups
@@ -402,7 +431,7 @@ def build_player_schedule_table(all_matches_info, player_names, court_names):
 
 def assign_matches(player_names, player_genders, player_skills, court_names, court_size=4,
                    total_matches=6, samples=100000, reject_mixed=False,
-                   enable_skill=False, skill_weight=20):
+                   enable_skill=False, skill_weight=20, force_outi_asmo=False):
     num_players = len(player_names)
     available_courts = len(court_names)
     courts_to_use = determine_courts_to_use(num_players, available_courts, court_size)
@@ -414,12 +443,33 @@ def assign_matches(player_names, player_genders, player_skills, court_names, cou
     # Maintain a set of canonical configurations that have already been used
     match_history = set()
 
+    # NEW: Determine the forced pair indices if the option is enabled and both players are present.
+    forced_pair_indices = None
+    if force_outi_asmo:
+        try:
+            asmo_index = player_names.index("Asmo")
+            outi_index = player_names.index("Outi")
+            forced_pair_indices = (asmo_index, outi_index)
+        except ValueError:
+            forced_pair_indices = None
+
     for match_number in range(total_matches):
         st.info(f"--- Assigning players for Match {match_number+1} ---")
         total_court_capacity = courts_to_use * court_size
         num_benched = max(0, num_players - total_court_capacity)
         bench_players = select_bench_players(players, rest_tracker, num_benched)
         available_players = [p for p in players if p not in bench_players]
+
+        # NEW: Enforce the rule that if Asmo is playing, Outi must be playing.
+        if forced_pair_indices is not None:
+            asmo_index, outi_index = forced_pair_indices
+            # If Asmo is available but Outi is not, swap them.
+            if asmo_index in available_players and outi_index not in available_players:
+                available_players.remove(asmo_index)
+                bench_players.append(asmo_index)
+                if outi_index in bench_players:
+                    bench_players.remove(outi_index)
+                available_players.append(outi_index)
 
         best_match = find_best_match(
             available_players,
@@ -434,7 +484,8 @@ def assign_matches(player_names, player_genders, player_skills, court_names, cou
             enable_skill=enable_skill,
             player_skills=player_skills,
             skill_weight=skill_weight,
-            match_history=match_history
+            match_history=match_history,
+            forced_pair_indices=forced_pair_indices
         )
         if best_match:
             for group in best_match:
@@ -736,6 +787,8 @@ def main():
 
     reject_mixed = st.checkbox("🏳️‍🌈 Prefer Same-Sex Play", value=False)
     enable_skill = st.checkbox("🎯 Skill-based Matches", value=True)
+    # NEW: Checkbox for forcing Outi and Asmo to play together (enabled by default).
+    force_outi_asmo = st.checkbox("Always pair Outi & Asmo", value=True)
     with st.expander("⚖️ Skill Penalty Weight", expanded=False):
         skill_weight = st.number_input("Enter skill penalty weight", min_value=1, value=20)
 
@@ -764,7 +817,8 @@ def main():
                     samples=samples,
                     reject_mixed=reject_mixed,
                     enable_skill=enable_skill,
-                    skill_weight=skill_weight
+                    skill_weight=skill_weight,
+                    force_outi_asmo=force_outi_asmo  # feature enabled by default
                 )
                 player_schedule_table = build_player_schedule_table(all_matches_info, player_names_no_gender, court_names)
                 
