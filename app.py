@@ -1,3 +1,7 @@
+###############################################################################
+#  Mijas Padellers Match Scheduler – Streamlit application                    #
+#  Last updated: 18 Apr 2025 – dynamic print page‑breaks & stats‑bug fix      #
+###############################################################################
 import streamlit as st
 import itertools
 import numpy as np
@@ -6,582 +10,402 @@ from datetime import date
 import math
 from math import comb, factorial
 
-# ---------------------- 1) SET PAGE CONFIG FIRST ----------------------
-st.set_page_config(page_title="Mijas Padellers Match Scheduler", layout="centered", initial_sidebar_state="auto")
+# --------------------------------------------------------------------------- #
+#  Page config & compact CSS                                                  #
+# --------------------------------------------------------------------------- #
+st.set_page_config(page_title="Mijas Padellers Match Scheduler",
+                   layout="centered",
+                   initial_sidebar_state="auto")
 
-# ---------------------- Custom CSS for Compact Progress/Info ----------------------
 COMPACT_CSS = """
 <style>
 div[data-testid="stProgressBar"] > div[role="progressbar"] {
     background-color: #ff7f50;
 }
-div[data-testid="stProgressBar"] {
-    margin: 2px 0;
-    padding: 2px 0;
-}
-.css-1n76uvr, .stAlert {
-    padding: 0.3rem 0.5rem !important;
-    margin: 0.2rem 0 !important;
-}
+div[data-testid="stProgressBar"] { margin: 2px 0; padding: 2px 0; }
+.css-1n76uvr, .stAlert          { padding: .3rem .5rem!important; margin: .2rem 0!important; }
 </style>
 """
 st.markdown(COMPACT_CSS, unsafe_allow_html=True)
 
-# ---------------------- Helper Functions ----------------------
-def initialize_matrices(num_players):
-    return (np.zeros((num_players, num_players), dtype=int),
-            np.zeros((num_players, num_players), dtype=int))
+# --------------------------------------------------------------------------- #
+#  Helper functions                                                           #
+# --------------------------------------------------------------------------- #
+def initialize_matrices(n):
+    return (np.zeros((n, n), int), np.zeros((n, n), int))
 
-def initialize_rest_tracker(num_players):
-    return np.zeros(num_players, dtype=int)
+def initialize_rest_tracker(n):
+    return np.zeros(n, int)
 
 def compute_max_unique_matchups(N, K, S):
     M = K * S
-    if N < M:
-        return 0
-    return comb(N, M) * factorial(M) / ((factorial(S) ** K) * factorial(K))
+    return 0 if N < M else comb(N, M) * factorial(M) // ((factorial(S) ** K) * factorial(K))
 
-# NEW: Function to get a canonical representation of a 4-player match configuration.
 def canonical_config(group):
-    team1 = tuple(sorted(group[:2]))
-    team2 = tuple(sorted(group[2:4]))
-    return tuple(sorted([team1, team2]))
+    """Return an order‑invariant tuple identifying a 4‑player matchup."""
+    t1 = tuple(sorted(group[:2])); t2 = tuple(sorted(group[2:4]))
+    return tuple(sorted([t1, t2]))
 
-def evaluate_match(groups, teammate_matrix, opponent_matrix, reject_mixed, player_genders,
-                   available_players, court_size, enable_skill, player_skills, skill_weight, match_history=None,
-                   forced_pair_indices=None):
-    total_score = 0
-    for group in groups:
-        team1, team2 = group[:2], group[2:]
-        teammate_score = sum(teammate_matrix[i][j] for i, j in itertools.combinations(team1, 2)) + \
-                         sum(teammate_matrix[i][j] for i, j in itertools.combinations(team2, 2))
-        opponent_score = sum(opponent_matrix[i][j] for i, j in itertools.product(team1, team2))
-        diversity_penalty = teammate_score + opponent_score
-        total_score += (teammate_score + opponent_score + diversity_penalty)
+# --------------------------------------------------------------------------- #
+#  Match‑quality scoring & search                                             #
+# --------------------------------------------------------------------------- #
+def evaluate_match(groups, teammate_mtx, opponent_mtx, reject_mixed, genders,
+                   available, court_size, enable_skill, skills, skill_wt,
+                   history=None, forced_pair=None):
+    score = 0
+    for g in groups:
+        t1, t2 = g[:2], g[2:]
+        team_score = sum(teammate_mtx[i][j] for i, j in itertools.combinations(t1, 2)) + \
+                     sum(teammate_mtx[i][j] for i, j in itertools.combinations(t2, 2))
+        opp_score  = sum(opponent_mtx[i][j] for i, j in itertools.product(t1, t2))
+        score += team_score + opp_score + (team_score + opp_score)  # diversity penalty
 
     if enable_skill:
-        skill_penalty = 0
-        for group in groups:
-            team1, team2 = group[:2], group[2:]
-            avg1 = sum(player_skills[i] for i in team1) / len(team1)
-            avg2 = sum(player_skills[i] for i in team2) / len(team2)
-            skill_penalty += skill_weight * abs(avg1 - avg2)
-        total_score += skill_penalty
+        for g in groups:
+            a1 = (skills[g[0]] + skills[g[1]]) / 2
+            a2 = (skills[g[2]] + skills[g[3]]) / 2
+            score += skill_wt * abs(a1 - a2)
 
-    if reject_mixed and len(available_players) >= court_size:
-        for group in groups:
-            group_genders = [player_genders[i] for i in group]
-            if len(set(group_genders)) > 1:
-                available_pool = [player_genders[i] for i in available_players]
-                if available_pool.count('F') >= court_size or available_pool.count('M') >= court_size:
-                    total_score += 1000
+    if reject_mixed and len(available) >= court_size:
+        for g in groups:
+            gs = [genders[i] for i in g]
+            if len(set(gs)) > 1:
+                pool = [genders[i] for i in available]
+                if pool.count('F') >= court_size or pool.count('M') >= court_size:
+                    score += 1000
 
-    if match_history is not None:
-        for group in groups:
-            config = canonical_config(group)
-            if config in match_history:
-                total_score += 10000
+    if history:
+        for g in groups:
+            if canonical_config(g) in history:
+                score += 10000
 
-    # NEW: Force Outi and Asmo to play together if the option is enabled.
-    if forced_pair_indices is not None:
-        forced_a, forced_b = forced_pair_indices
-        found = False
-        for group in groups:
-            # Check if both forced players are in this group.
-            if forced_a in group and forced_b in group:
-                found = True
-                # Ensure they are on the same side (i.e. both in team1 or both in team2).
-                idx_a = group.index(forced_a)
-                idx_b = group.index(forced_b)
-                if not ((idx_a < 2 and idx_b < 2) or (idx_a >= 2 and idx_b >= 2)):
-                    total_score += 10000  # heavy penalty if on opposite teams
+    if forced_pair:
+        a_idx, o_idx = forced_pair
+        found_same_side = False
+        for g in groups:
+            if a_idx in g and o_idx in g:
+                idx_a = g.index(a_idx); idx_o = g.index(o_idx)
+                if (idx_a < 2) == (idx_o < 2):   # same side
+                    found_same_side = True
+                else:
+                    score += 10000
                 break
-        # If both forced players are in play (available) but not assigned together, add penalty.
-        all_players_in_groups = set(p for group in groups for p in group)
-        if forced_a in all_players_in_groups and forced_b in all_players_in_groups and not found:
-            total_score += 10000
+        in_groups = {p for grp in groups for p in grp}
+        if a_idx in in_groups and o_idx in in_groups and not found_same_side:
+            score += 10000
+    return score
 
-    return total_score
-
-def find_best_match(players, num_courts, court_size, teammate_matrix, opponent_matrix,
-                    match_number, samples=100000, reject_mixed=False,
-                    player_genders=None, enable_skill=False, player_skills=None, skill_weight=20, match_history=None,
-                    forced_pair_indices=None):
-    best_match, best_score = None, float('inf')
-    progress_bar = st.progress(0)
-    status_text = st.empty()
+def find_best_match(players, n_courts, court_sz, teammate_mtx, opponent_mtx,
+                    match_no, samples=100000, reject_mixed=False,
+                    genders=None, enable_skill=False, skills=None, skill_wt=20,
+                    history=None, forced_pair=None):
+    best, best_score = None, float('inf')
+    bar = st.progress(0); status = st.empty()
     for i in range(samples):
-        shuffled = players[:]
-        random.shuffle(shuffled)
-        groups = [tuple(shuffled[i*court_size:(i+1)*court_size]) for i in range(num_courts)]
+        shuffled = players[:]; random.shuffle(shuffled)
+        groups = [tuple(shuffled[j*court_sz:(j+1)*court_sz]) for j in range(n_courts)]
         if len(set(itertools.chain(*groups))) != len(players):
             continue
-
-        score = evaluate_match(
-            groups,
-            teammate_matrix,
-            opponent_matrix,
-            reject_mixed,
-            player_genders,
-            players,
-            court_size,
-            enable_skill,
-            player_skills,
-            skill_weight,
-            match_history=match_history,
-            forced_pair_indices=forced_pair_indices
-        )
-
-        if score < best_score:
-            best_score, best_match = score, groups
-
+        s = evaluate_match(groups, teammate_mtx, opponent_mtx, reject_mixed, genders,
+                           players, court_sz, enable_skill, skills, skill_wt,
+                           history, forced_pair)
+        if s < best_score:
+            best, best_score = groups, s
         if (i+1) % 1000 == 0:
-            pct = int((i+1)/samples * 100)
-            progress_bar.progress(pct)
-            status_text.write(f"Match {match_number+1}: sample {i+1:,} of {samples:,}")
+            bar.progress(int((i+1)/samples*100))
+            status.write(f"Match {match_no+1}: sample {(i+1):,}/{samples:,}")
+    bar.progress(100); status.write(f"Match {match_no+1} best match found!")
+    return best
 
-    progress_bar.progress(100)
-    status_text.write(f"Match {match_number+1} best match found!")
-    return best_match
+def update_matrices_for_match(groups, teammate_mtx, opponent_mtx):
+    for g in groups:
+        t1, t2 = g[:2], g[2:]
+        for i, j in itertools.combinations(t1, 2):
+            teammate_mtx[i][j] += 1; teammate_mtx[j][i] += 1
+        for i, j in itertools.combinations(t2, 2):
+            teammate_mtx[i][j] += 1; teammate_mtx[j][i] += 1
+        for i in t1:
+            for j in t2:
+                opponent_mtx[i][j] += 1; opponent_mtx[j][i] += 1
 
-def update_matrices_for_match(groups, teammate_matrix, opponent_matrix):
-    for group in groups:
-        team1, team2 = group[:2], group[2:]
-        for i, j in itertools.combinations(team1, 2):
-            teammate_matrix[i][j] += 1
-            teammate_matrix[j][i] += 1
-        for i, j in itertools.combinations(team2, 2):
-            teammate_matrix[i][j] += 1
-            teammate_matrix[j][i] += 1
-        for i in team1:
-            for j in team2:
-                opponent_matrix[i][j] += 1
-                opponent_matrix[j][i] += 1
+def select_bench_players(players, rest_track, n_bench):
+    return sorted(players, key=lambda x: rest_track[x])[:n_bench]
 
-def select_bench_players(players, rest_tracker, num_benched):
-    return sorted(players, key=lambda x: rest_tracker[x])[:num_benched]
+def determine_courts_to_use(n_players, available_courts, court_sz=4):
+    return min(available_courts, n_players // court_sz)
 
-def determine_courts_to_use(num_players, available_courts, court_size=4):
-    return min(available_courts, num_players // court_size)
-
-def deduplicate_names(name_list):
-    seen = {}
-    result = []
-    for name in name_list:
-        if name not in seen:
-            seen[name] = 1
-            result.append(name)
+def deduplicate_names(names):
+    seen, out = {}, []
+    for n in names:
+        if n not in seen:
+            seen[n] = 1; out.append(n)
         else:
-            seen[name] += 1
-            new_name = f"{name} ({seen[name]})"
-            while new_name in seen:
-                seen[new_name] = 1
-                new_name = f"{name} ({seen[new_name]})"
-            seen[new_name] = 1
-            result.append(new_name)
-    return result
+            seen[n] += 1
+            new = f"{n} ({seen[n]})"
+            while new in seen:
+                seen[new] = 1; new = f"{n} ({seen[new]})"
+            seen[new] = 1; out.append(new)
+    return out
 
-def format_match_table_html(match_number, best_match, court_names, player_names, bench_players):
+# --------------------------------------------------------------------------- #
+#  HTML builders                                                              #
+# --------------------------------------------------------------------------- #
+def format_match_table_html(match_no, groups, court_names, player_names, bench):
     html = f"""
-    <div style="margin-bottom: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); border-radius: 8px; overflow: hidden; background-color: #ffffff;">
-      <div style="padding: 10px;">
-        <h2 style="text-align: center; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; margin: 0 0 10px 0;">Match {match_number+1}</h2>
-        <table style="width: 100%; border-collapse: collapse; table-layout: fixed; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;">
-          <thead>
-            <tr style="background-color: #f0f0f0;">
-              <th style="width: 20%; padding: 8px; text-align: left; border-bottom: 2px solid #ddd;">Court</th>
-              <th style="width: 30%; padding: 8px; text-align: left; border-bottom: 2px solid #ddd;">Team 1</th>
-              <th style="width: 10%; padding: 8px; text-align: center; border-bottom: 2px solid #ddd;">vs</th>
-              <th style="width: 30%; padding: 8px; text-align: left; border-bottom: 2px solid #ddd;">Team 2</th>
-            </tr>
-          </thead>
-          <tbody>
+    <div style="margin-bottom:10px;box-shadow:0 2px 4px rgba(0,0,0,.1);
+                border-radius:8px;overflow:hidden;background:#fff;">
+      <div style="padding:10px;">
+        <h2 style="text-align:center;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;
+                   margin:0 0 10px 0;">Match {match_no+1}</h2>
+        <table style="width:100%;border-collapse:collapse;table-layout:fixed;
+                      font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;">
+          <thead><tr style="background:#f0f0f0;">
+            <th style="width:20%;padding:8px;text-align:left;border-bottom:2px solid #ddd;">Court</th>
+            <th style="width:30%;padding:8px;text-align:left;border-bottom:2px solid #ddd;">Team&nbsp;1</th>
+            <th style="width:10%;padding:8px;text-align:center;border-bottom:2px solid #ddd;">vs</th>
+            <th style="width:30%;padding:8px;text-align:left;border-bottom:2px solid #ddd;">Team&nbsp;2</th>
+          </tr></thead><tbody>
     """
-    for court_id, group in enumerate(best_match):
-        team1 = " & ".join([player_names[p] for p in group[:2]])
-        team2 = " & ".join([player_names[p] for p in group[2:]])
-        cname = court_names[court_id]
-        row_bg = "#ffffff" if court_id % 2 == 0 else "#f9f9f9"
+    for cid, g in enumerate(groups):
+        t1 = " & ".join(player_names[p] for p in g[:2])
+        t2 = " & ".join(player_names[p] for p in g[2:])
+        row_bg = "#ffffff" if cid % 2 == 0 else "#f9f9f9"
         html += f"""
-            <tr style="background-color: {row_bg};">
-              <td style="width: 20%; padding: 6px; border-bottom: 1px solid #ddd;">{cname}</td>
-              <td style="width: 30%; padding: 6px; border-bottom: 1px solid #ddd;">{team1}</td>
-              <td style="width: 10%; padding: 6px; border-bottom: 1px solid #ddd; text-align: center;">vs</td>
-              <td style="width: 30%; padding: 6px; border-bottom: 1px solid #ddd;">{team2}</td>
-            </tr>
-        """
-    resting_names = ", ".join([player_names[p] for p in bench_players])
+            <tr style="background:{row_bg};">
+              <td style="width:20%;padding:6px;border-bottom:1px solid #ddd;">{court_names[cid]}</td>
+              <td style="width:30%;padding:6px;border-bottom:1px solid #ddd;">{t1}</td>
+              <td style="width:10%;padding:6px;border-bottom:1px solid #ddd;text-align:center;">vs</td>
+              <td style="width:30%;padding:6px;border-bottom:1px solid #ddd;">{t2}</td>
+            </tr>"""
+    resting = ", ".join(player_names[p] for p in bench)
     html += f"""
-          </tbody>
-          <tfoot>
-            <tr>
-              <td style="width: 20%; padding: 6px; background-color: #f0f0f0; font-weight: bold;">Resting</td>
-              <td style="width: 80%; padding: 6px; background-color: #f0f0f0;" colspan="3">{resting_names}</td>
-            </tr>
-          </tfoot>
-        </table>
-      </div>
-    </div>
-    """
+          </tbody><tfoot><tr>
+            <td style="width:20%;padding:6px;background:#f0f0f0;font-weight:bold;">Resting</td>
+            <td style="width:80%;padding:6px;background:#f0f0f0;" colspan="3">{resting}</td>
+          </tr></tfoot></table></div></div>"""
     return html
 
-def format_statistics_html(stats, date_str_uk, all_matches_info, final_player_genders):
-    explanation_text = (
+# -------------------- statistics / debug helpers --------------------------- #
+def format_debug_schedule_html(all_matches, genders, skills, names, courts):
+    dbg = "<h2>Debug Schedule with Skill Info</h2>\n"
+    for idx, (groups, bench) in enumerate(all_matches):
+        dbg += f"""
+        <div style='margin-bottom:10px;border:1px solid #ccc;border-radius:8px;background:#fff;padding:10px;'>
+          <h3 style='text-align:center;margin-top:0;'>Match {idx+1}</h3>
+          <table style='width:100%;border-collapse:collapse;table-layout:fixed;'>
+            <thead><tr style='background:#f0f0f0;'>
+              <th style='width:15%;padding:6px;border-bottom:2px solid #ddd;'>Court</th>
+              <th style='width:25%;padding:6px;border-bottom:2px solid #ddd;'>Team&nbsp;1</th>
+              <th style='width:25%;padding:6px;border-bottom:2px solid #ddd;'>Team&nbsp;2</th>
+              <th style='width:10%;padding:6px;border-bottom:2px solid #ddd;text-align:center;'>T1 Skill</th>
+              <th style='width:10%;padding:6px;border-bottom:2px solid #ddd;text-align:center;'>T2 Skill</th>
+              <th style='width:15%;padding:6px;border-bottom:2px solid #ddd;text-align:center;'>Diff</th>
+            </tr></thead><tbody>"""
+        for cid, g in enumerate(groups):
+            t1, t2 = g[:2], g[2:]
+            t1_s = sum(skills[i] for i in t1); t2_s = sum(skills[i] for i in t2)
+            t1_str = " & ".join(f"{names[i]} ({skills[i]})" for i in t1)
+            t2_str = " & ".join(f"{names[i]} ({skills[i]})" for i in t2)
+            row_bg = "#ffffff" if cid % 2 == 0 else "#f9f9f9"
+            dbg += f"""
+              <tr style='background:{row_bg};'><td style='padding:6px;border-bottom:1px solid #ddd;'>{courts[cid]}</td>
+              <td style='padding:6px;border-bottom:1px solid #ddd;'>{t1_str}</td>
+              <td style='padding:6px;border-bottom:1px solid #ddd;'>{t2_str}</td>
+              <td style='padding:6px;border-bottom:1px solid #ddd;text-align:center;'>{t1_s}</td>
+              <td style='padding:6px;border-bottom:1px solid #ddd;text-align:center;'>{t2_s}</td>
+              <td style='padding:6px;border-bottom:1px solid #ddd;text-align:center;'>{abs(t1_s-t2_s)}</td></tr>"""
+        rest_names = ", ".join(f"{names[p]} ({skills[p]})" for p in bench) if bench else "None"
+        dbg += f"""
+            </tbody><tfoot><tr><td style='padding:6px;background:#f0f0f0;font-weight:bold;'>Resting</td>
+            <td style='padding:6px;background:#f0f0f0;' colspan='5'>{rest_names}</td></tr></tfoot>
+          </table></div>"""
+    return dbg
+
+def build_player_schedule_table(all_matches, names, courts):
+    n_matches = len(all_matches)
+    sorted_idx = sorted(range(len(names)), key=lambda i: names[i].lower().strip())
+    col_w = 80 / n_matches if n_matches else 80
+    table = ["<h2>Player Schedule Summary</h2>",
+             "<table style='width:100%;border-collapse:collapse;table-layout:fixed;'><thead><tr style='background:#f0f0f0;text-align:center;'>",
+             "<th style='width:20%;padding:6px;border-bottom:2px solid #ddd;'>Player</th>"]
+    table += [f"<th style='width:{col_w}%;padding:6px;border-bottom:2px solid #ddd;'>Match {i+1}</th>"
+              for i in range(n_matches)]
+    table += ["</tr></thead><tbody>"]
+    for idx in sorted_idx:
+        table.append(f"<tr><td style='padding:6px;border-bottom:1px solid #ddd;'>{names[idx]}</td>")
+        for groups, bench in all_matches:
+            cell = "<b>Rest</b>" if idx in bench else ""
+            if not cell:
+                for c_i, g in enumerate(groups):
+                    if idx in g:
+                        cell = courts[c_i] if c_i < len(courts) else ""
+                        break
+            table.append(f"<td style='padding:6px;border-bottom:1px solid #ddd;text-align:center;'>{cell}</td>")
+        table.append("</tr>")
+    table.append("</tbody></table>")
+    return "".join(table)
+
+def format_statistics_html(stats, date_str_uk, all_matches, genders):
+    explanation = (
         "<h3>Session Overview</h3>"
         "<p>This page shows how many times each player rested, and how often they teamed up or faced each other.</p>"
-        "<p>"
-        "Reading the lines:<br>"
-        "<strong>P1 [R]</strong>: P2 [X,Y], P3 [X,Y], ...<br>"
-        "- [R] is how many times Player 1 rested.<br>"
-        "- [X,Y] after another player's name means Player 1 played <strong>with</strong> that player X times and <strong>against</strong> that player Y times.<br>"
-        "</p>"
-        "<p>For example, <em>P1 [2]: P2 [1,3]</em> means Player 1 rested twice total, teamed with Player 2 once, and played against Player 2 three times.</p>"
-        "<p>"
-        "After the player breakdown, you'll see totals for how many times people were teammates and opponents overall,<br>"
-        "and how many all-male, all-female, or mixed games occurred."
-        "</p>"
+        "<p>Reading the lines:<br><strong>P1 [R]</strong>: P2 [X,Y], ...</p>"
+        "<p>- [R] = times rested.&nbsp; [X,Y] = with&nbsp;X / against&nbsp;Y.</p>"
+        "<p>Totals and gender distribution follow the list.</p>"
     )
+    return f"""
+    <!DOCTYPE html><html lang="en"><head><meta charset="UTF-8">
+    <title>Mijas Padellers Match Statistics - {date_str_uk}</title>
+    <style>
+        body{{font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;background:#fff;color:#000;margin:0;padding:20px;}}
+        table{{width:100%;border-collapse:collapse;margin-bottom:10px;table-layout:fixed;}}
+        th,td{{padding:6px;border:1px solid #ddd;text-align:left;}}
+        th{{background:#f2f2f2;font-size:1.1em;}}
+        tr:nth-child(even){{background:#f9f9f9;}}
+        @media print{{body{{margin:0;padding:0;}}}}
+    </style></head><body><div class='container'>
+    <h1 style='text-align:center;'>Mijas Padellers Match Statistics</h1>
+    <h2 style='text-align:center;'>{date_str_uk}</h2>
+    <div style='background:#f9f9f9;padding:10px;border:1px solid #ddd;border-radius:8px;margin-bottom:20px;'>
+      {explanation}<pre style='white-space:pre-wrap;line-height:1.5em;'>{stats}</pre>
+    </div></div></body></html>"""
 
-    html = f"""
-    <!DOCTYPE html>
-    <html lang="en">
-    <head>
-      <meta charset="UTF-8">
-      <title>Mijas Padellers Match Statistics - {date_str_uk}</title>
-      <style>
-        body {{
-          font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
-          background-color: #ffffff;
-          color: #000000;
-          margin: 0;
-          padding: 20px;
-        }}
-        .container {{
-          width: 100%;
-          margin: 0;
-        }}
-        h1 {{
-          text-align: center;
-          color: #333333;
-          margin-bottom: 10px;
-        }}
-        h2 {{
-          text-align: center;
-          color: #666666;
-          margin-bottom: 20px;
-          font-size: 1.2em;
-        }}
-        h3 {{
-          margin-top: 0;
-        }}
-        .stats-box {{
-          background-color: #f9f9f9;
-          padding: 10px;
-          border: 1px solid #dddddd;
-          border-radius: 8px;
-          margin-bottom: 20px;
-        }}
-        .stats-content {{
-          white-space: pre-wrap;
-          line-height: 1.5em;
-        }}
-        table {{
-          width: 100%;
-          border-collapse: collapse;
-          margin-bottom: 10px;
-          table-layout: fixed;
-        }}
-        th, td {{
-          padding: 6px;
-          text-align: left;
-          border: 1px solid #dddddd;
-        }}
-        th {{
-          background-color: #f2f2f2;
-          font-size: 1.1em;
-        }}
-        tr:nth-child(even) {{
-          background-color: #f9f9f9;
-        }}
-        tr:nth-child(odd) {{
-          background-color: #ffffff;
-        }}
-        tfoot td {{
-          background-color: #f2f2f2;
-          font-weight: bold;
-          padding: 6px;
-        }}
-        @media print {{
-          body {{
-            margin: 0;
-            padding: 0;
-          }}
-          .container {{
-            width: 100%;
-            margin: 0;
-          }}
-        }}
-      </style>
-    </head>
-    <body>
-      <div class="container">
-        <h1>Mijas Padellers Match Statistics</h1>
-        <h2>{date_str_uk}</h2>
-        <div class="stats-box">
-          {explanation_text}
-          <div class="stats-content">{stats}</div>
-        </div>
-      </div>
-    </body>
-    </html>
-    """
-    return html
+# --------------------------------------------------------------------------- #
+#  Statistics generator (bug‑fixed)                                           #
+# --------------------------------------------------------------------------- #
+def generate_Schedule_Statistics(team_mtx, opp_mtx, rest_track, names,
+                                 all_matches, genders, skills, courts):
+    lines = []; team_total = opp_total = 0
+    tfreq, ofreq = {}, {}
+    n = len(names)
 
-def format_debug_schedule_html(all_matches_info, final_player_genders, final_player_skills,
-                               player_names, court_names):
-    debug_html = "<h2>Debug Schedule with Skill Info</h2>\n"
-    for match_index, (match_groups, bench_players) in enumerate(all_matches_info):
-        debug_html += f"""
-        <div style="margin-bottom: 10px; border: 1px solid #ccc; border-radius: 8px; background-color: #ffffff; padding: 10px;">
-          <h3 style="text-align: center; margin-top: 0;">Match {match_index+1}</h3>
-          <table style="width: 100%; border-collapse: collapse; table-layout: fixed; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;">
-            <thead>
-              <tr style="background-color: #f0f0f0;">
-                <th style="width: 15%; padding: 6px; border-bottom: 2px solid #ddd;">Court</th>
-                <th style="width: 25%; padding: 6px; border-bottom: 2px solid #ddd;">Team 1</th>
-                <th style="width: 25%; padding: 6px; border-bottom: 2px solid #ddd;">Team 2</th>
-                <th style="width: 10%; padding: 6px; border-bottom: 2px solid #ddd; text-align: center;">Team1 Skill</th>
-                <th style="width: 10%; padding: 6px; border-bottom: 2px solid #ddd; text-align: center;">Team2 Skill</th>
-                <th style="width: 15%; padding: 6px; border-bottom: 2px solid #ddd; text-align: center;">Difference</th>
-              </tr>
-            </thead>
-            <tbody>
-        """
-        for court_id, group in enumerate(match_groups):
-            team1 = group[:2]
-            team2 = group[2:]
-            def player_str(idx):
-                return f"{player_names[idx]} ({final_player_skills[idx]})"
-            team1_str = " & ".join([player_str(idx) for idx in team1])
-            team2_str = " & ".join([player_str(idx) for idx in team2])
-            team1_skill = sum(final_player_skills[idx] for idx in team1)
-            team2_skill = sum(final_player_skills[idx] for idx in team2)
-            diff = abs(team1_skill - team2_skill)
-            cname = court_names[court_id]
-            row_bg = "#ffffff" if court_id % 2 == 0 else "#f9f9f9"
-            debug_html += f"""
-              <tr style="background-color: {row_bg};">
-                <td style="width: 15%; padding: 6px; border-bottom: 1px solid #ddd;">{cname}</td>
-                <td style="width: 25%; padding: 6px; border-bottom: 1px solid #ddd;">{team1_str}</td>
-                <td style="width: 25%; padding: 6px; border-bottom: 1px solid #ddd;">{team2_str}</td>
-                <td style="width: 10%; padding: 6px; border-bottom: 1px solid #ddd; text-align: center;">{team1_skill}</td>
-                <td style="width: 10%; padding: 6px; border-bottom: 1px solid #ddd; text-align: center;">{team2_skill}</td>
-                <td style="width: 15%; padding: 6px; border-bottom: 1px solid #ddd; text-align: center;">{diff}</td>
-              </tr>
-            """
-        if bench_players:
-            resting_names = ", ".join([f"{player_names[p]} ({final_player_skills[p]})" for p in bench_players])
-        else:
-            resting_names = "None"
-        debug_html += f"""
-            </tbody>
-            <tfoot>
-              <tr>
-                <td style="width: 15%; padding: 6px; background-color: #f0f0f0; font-weight: bold;">Resting</td>
-                <td style="width: 85%; padding: 6px; background-color: #f0f0f0;" colspan="5">{resting_names}</td>
-              </tr>
-            </tfoot>
-          </table>
-        </div>
-        """
-    return debug_html
+    for p in range(n):
+        rest = rest_track[p]; pair_list = []
+        for q in range(n):
+            if p == q: continue
+            t, o = team_mtx[p][q], opp_mtx[p][q]
+            tfreq[t] = tfreq.get(t, 0) + 1
+            ofreq[o] = ofreq.get(o, 0) + 1
+            pair_list.append(f"{names[q]} [{t},{o}]")
+            team_total += t; opp_total += o
+        lines.append(f"{names[p]} [{rest}]: " + ", ".join(pair_list))
 
-def build_player_schedule_table(all_matches_info, player_names, court_names):
-    num_matches = len(all_matches_info)
-    sorted_indices = sorted(range(len(player_names)), key=lambda i: player_names[i].strip().lower())
-    table_html = "<h2>Player Schedule Summary</h2>\n"
-    table_html += """
-    <table style="width: 100%; border-collapse: collapse; table-layout: fixed; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;">
-      <thead>
-        <tr style="background-color: #f0f0f0; text-align: center;">
-          <th style="width: 20%; padding: 6px; border-bottom: 2px solid #ddd;">Player</th>
-    """
-    col_width = 80 / num_matches if num_matches > 0 else 80
-    for m in range(num_matches):
-        table_html += f'<th style="width: {col_width}%; padding: 6px; border-bottom: 2px solid #ddd; text-align: center;">Match {m+1}</th>'
-    table_html += "</tr></thead><tbody>"
+    lines += [f"\nTeammate Total: {team_total}",
+              f"Opponent Total: {opp_total}",
+              "\nTeammate Count Frequencies:"]
+    lines += [f"  Count {k}: {v}" for k, v in sorted(tfreq.items())]
+    lines.append("\nOpponent Count Frequencies:")
+    lines += [f"  Count {k}: {v}" for k, v in sorted(ofreq.items())]
+    stats_text = "\n".join(lines)
 
-    for idx in sorted_indices:
-        pname = player_names[idx]
-        table_html += "<tr>"
-        table_html += f'<td style="padding: 6px; border-bottom: 1px solid #ddd;">{pname}</td>'
-        for (best_match, bench_players) in all_matches_info:
-            assigned = "Rest" if idx in bench_players else None
-            if not assigned:
-                for court_index, group in enumerate(best_match):
-                    if idx in group:
-                        assigned = court_names[court_index] if court_index < len(court_names) else ""
-                        break
-            if assigned == "Rest":
-                assigned = "<b>Rest</b>"
-            table_html += f'<td style="padding: 6px; border-bottom: 1px solid #ddd; text-align: center;">{assigned}</td>'
-        table_html += "</tr>"
-    table_html += "</tbody></table>"
-    return table_html
+    all_male = all_fem = mixed = 0
+    for groups, _ in all_matches:
+        for g in groups:
+            gs = [genders[i] for i in g]
+            if len(set(gs)) == 1:
+                if gs[0] == "M":
+                    all_male += 1
+                else:
+                    all_fem += 1
+            else:
+                mixed += 1
+    stats_text += (f"\nAll-Male Games: {all_male}\n"
+                   f"All-Female Games: {all_fem}\n"
+                   f"Mixed Games: {mixed}\n")
 
-def assign_matches(player_names, player_genders, player_skills, court_names, court_size=4,
-                   total_matches=6, samples=100000, reject_mixed=False,
-                   enable_skill=False, skill_weight=20, force_outi_asmo=False):
-    num_players = len(player_names)
-    available_courts = len(court_names)
-    courts_to_use = determine_courts_to_use(num_players, available_courts, court_size)
-    teammate_matrix, opponent_matrix = initialize_matrices(num_players)
-    rest_tracker = initialize_rest_tracker(num_players)
-    players = list(range(num_players))
-    schedule_output = []
-    all_matches_info = []
-    # Maintain a set of canonical configurations that have already been used
-    match_history = set()
+    base = format_statistics_html(stats_text, st.session_state["date_str_uk"],
+                                  all_matches, genders)
+    debug = format_debug_schedule_html(all_matches, genders, skills, names, courts)
+    p_table = build_player_schedule_table(all_matches, names, courts)
+    return base.replace("</body>",
+                        f"{debug}<div style='page-break-before: always;'>{p_table}</div></body>")
+# --------------------------------------------------------------------------- #
+#  Core scheduler with reliable page‑break insertion                          #
+# --------------------------------------------------------------------------- #
+def assign_matches(names, genders, skills, courts, court_sz=4, total_matches=6,
+                   samples=100000, reject_mixed=False, enable_skill=False,
+                   skill_wt=20, force_outi_asmo=False):
+    n_players   = len(names)
+    courts_used = determine_courts_to_use(n_players, len(courts), court_sz)
 
-    # NEW: Determine the forced pair indices if the option is enabled and both players are present.
-    forced_pair_indices = None
+    teammate_mtx, opponent_mtx = initialize_matrices(n_players)
+    rest_track  = initialize_rest_tracker(n_players)
+    players     = list(range(n_players))
+    history     = set()
+    all_matches = []
+
+    # detect Outi + Asmo indices
+    forced_pair = None
     if force_outi_asmo:
         try:
-            asmo_index = player_names.index("Asmo")
-            outi_index = player_names.index("Outi")
-            forced_pair_indices = (asmo_index, outi_index)
+            forced_pair = (names.index("Asmo"), names.index("Outi"))
         except ValueError:
-            forced_pair_indices = None
+            pass   # one or both not present
 
-    for match_number in range(total_matches):
-        st.info(f"--- Assigning players for Match {match_number+1} ---")
-        total_court_capacity = courts_to_use * court_size
-        num_benched = max(0, num_players - total_court_capacity)
-        bench_players = select_bench_players(players, rest_tracker, num_benched)
-        available_players = [p for p in players if p not in bench_players]
+    for m_no in range(total_matches):
+        st.info(f"--- Assigning players for Match {m_no+1} ---")
 
-        # NEW: Enforce the rule that if Asmo is playing, Outi must be playing.
-        if forced_pair_indices is not None:
-            asmo_index, outi_index = forced_pair_indices
-            # If Asmo is available but Outi is not, swap them.
-            if asmo_index in available_players and outi_index not in available_players:
-                available_players.remove(asmo_index)
-                bench_players.append(asmo_index)
-                if outi_index in bench_players:
-                    bench_players.remove(outi_index)
-                available_players.append(outi_index)
+        capacity = courts_used * court_sz
+        benched  = select_bench_players(players, rest_track,
+                                        max(0, n_players - capacity))
+        available = [p for p in players if p not in benched]
 
-        best_match = find_best_match(
-            available_players,
-            courts_to_use,
-            court_size,
-            teammate_matrix,
-            opponent_matrix,
-            match_number,
-            samples=samples,
-            reject_mixed=reject_mixed,
-            player_genders=player_genders,
-            enable_skill=enable_skill,
-            player_skills=player_skills,
-            skill_weight=skill_weight,
-            match_history=match_history,
-            forced_pair_indices=forced_pair_indices
-        )
-        if best_match:
-            for group in best_match:
-                config = canonical_config(group)
-                match_history.add(config)
-            all_matches_info.append((best_match, bench_players))
-            update_matrices_for_match(best_match, teammate_matrix, opponent_matrix)
-            match_table = format_match_table_html(match_number, best_match, court_names, player_names, bench_players)
-            schedule_output.append(match_table)
-            st.success(f"Match {match_number+1} assigned successfully.")
-            for bp in bench_players:
-                rest_tracker[bp] += 1
+        # ensure forced pair both play or both rest
+        if forced_pair:
+            a_idx, o_idx = forced_pair
+            if a_idx in available and o_idx not in available:
+                available.remove(a_idx); benched.append(a_idx)
+                if o_idx in benched:
+                    benched.remove(o_idx)
+                available.append(o_idx)
 
-    return "".join(schedule_output), teammate_matrix, opponent_matrix, rest_tracker, all_matches_info
+        best = find_best_match(available, courts_used, court_sz,
+                               teammate_mtx, opponent_mtx, m_no, samples,
+                               reject_mixed, genders, enable_skill, skills,
+                               skill_wt, history, forced_pair)
 
-def generate_Schedule_Statistics(teammate_matrix, opponent_matrix, rest_tracker, player_names,
-                                 all_matches_info, final_player_genders, final_player_skills, court_names):
-    output = []
-    teammate_total, opponent_total = 0, 0
-    teammate_frequencies, opponent_frequencies = {}, {}
-    num_players = len(player_names)
+        if best:
+            for grp in best:
+                history.add(canonical_config(grp))
+            all_matches.append((best, benched))
+            update_matrices_for_match(best, teammate_mtx, opponent_mtx)
+            for p in benched:
+                rest_track[p] += 1
 
-    for player in range(num_players):
-        rest_count = rest_tracker[player]
-        teammates_opponents = []
-        for other_player in range(num_players):
-            if player != other_player:
-                teammate_count = teammate_matrix[player][other_player]
-                opponent_count = opponent_matrix[player][other_player]
-                teammate_frequencies[teammate_count] = teammate_frequencies.get(teammate_count, 0) + 1
-                opponent_frequencies[opponent_count] = opponent_frequencies.get(opponent_count, 0) + 1
-                teammates_opponents.append(f"{player_names[other_player]} [{teammate_count},{opponent_count}]")
-                teammate_total += teammate_count
-                opponent_total += opponent_count
-        output.append(f"{player_names[player]} [{rest_count}]: " + ", ".join(teammates_opponents))
+    # ------------ build schedule HTML with page breaks ---------------------
+    matches_per_page = 3 if courts_used <= 4 else 2
+    html_blocks = []
+    for idx, (groups, bench) in enumerate(all_matches):
+        if idx and idx % matches_per_page == 0:
+            html_blocks.append("<div style='page-break-after: always;'></div>")
+        html_blocks.append(format_match_table_html(idx, groups, courts,
+                                                   names, bench))
+    schedule_html = "".join(html_blocks)
+    # ----------------------------------------------------------------------
 
-    output.append(f"\nTeammate Total: {teammate_total}")
-    output.append(f"Opponent Total: {opponent_total}")
-    output.append("\nTeammate Count Frequencies:")
-    for count, freq in sorted(teammate_frequencies.items()):
-        output.append(f"  Count {count}: {freq}")
-    output.append("\nOpponent Count Frequencies:")
-    for count, freq in sorted(opponent_frequencies.items()):
-        output.append(f"  Count {count}: {freq}")
+    return schedule_html, teammate_mtx, opponent_mtx, rest_track, all_matches, courts_used
 
-    stats_text = "\n".join(output)
 
-    all_male_games = 0
-    all_female_games = 0
-    mixed_games = 0
-    for best_match, bench_players in all_matches_info:
-        for group in best_match:
-            group_genders = [final_player_genders[idx] for idx in group]
-            if len(set(group_genders)) == 1:
-                if group_genders[0] == "M":
-                    all_male_games += 1
-                else:
-                    all_female_games += 1
-            else:
-                mixed_games += 1
-
-    distribution_text = (
-        f"\nAll-Male Games: {all_male_games}"
-        f"\nAll-Female Games: {all_female_games}"
-        f"\nMixed Games: {mixed_games}\n"
-    )
-    full_stats_text = stats_text + "\n" + distribution_text
-
-    base_html = format_statistics_html(full_stats_text, st.session_state["date_str_uk"], all_matches_info, final_player_genders)
-    debug_schedule = format_debug_schedule_html(all_matches_info, final_player_genders, final_player_skills, player_names, court_names)
-    player_schedule = build_player_schedule_table(all_matches_info, player_names, court_names)
-    final_html = base_html.replace(
-        "</body>",
-        f"{debug_schedule}<div style='page-break-before: always;'>{player_schedule}</div></body>"
-    )
-    return final_html
-
+# --------------------------------------------------------------------------- #
+#  Streamlit UI                                                               #
+# --------------------------------------------------------------------------- #
 def main():
-    if "all_schedules" not in st.session_state:
-        st.session_state["all_schedules"] = []
-    if "all_stats" not in st.session_state:
-        st.session_state["all_stats"] = []
-    if "date_str_uk" not in st.session_state:
-        st.session_state["date_str_uk"] = ""
-    if "player_selection_order" not in st.session_state:
-        st.session_state["player_selection_order"] = {}
-    if "player_counter" not in st.session_state:
-        st.session_state["player_counter"] = 1
+    # ----------------- session defaults -----------------
+    defaults = {
+        "all_schedules": [], "all_stats": [], "date_str_uk": "",
+        "player_selection_order": {}, "player_counter": 1
+    }
+    for k, v in defaults.items():
+        if k not in st.session_state:
+            st.session_state[k] = v
 
+    # ----------------- page header ----------------------
     st.title("Mijas Padellers Match Scheduler")
+    sess_date = st.date_input("📅 Session Date", value=date.today())
+    date_str  = sess_date.strftime("%A %d %B %Y")
+    st.write("Selected date:", date_str)
 
-    session_date = st.date_input("📅 Session Date", value=date.today())
-    formatted_date = session_date.strftime("%A %d %B %Y")
-    st.write("Selected date:", formatted_date)
-
-    # Updated REGULAR_PLAYERS list: Julie and Juan removed, Lilli and Roger added.
+    # ----------------- player master list ---------------
     REGULAR_PLAYERS = [
         {"name": "Asmo", "gender": "M", "skill": 5},
         {"name": "Agneta", "gender": "F", "skill": 5},
@@ -594,7 +418,7 @@ def main():
         {"name": "Colin", "gender": "M", "skill": 5},
         {"name": "Cris Burgos", "gender": "F", "skill": 4},
         {"name": "Daryoush", "gender": "M", "skill": 5},
-        {"name": "Dave", "gender": "M", "skill": 7},        
+        {"name": "Dave", "gender": "M", "skill": 7},
         {"name": "Declan", "gender": "M", "skill": 7},
         {"name": "Dee", "gender": "F", "skill": 4},
         {"name": "Evgen", "gender": "M", "skill": 6},
@@ -606,9 +430,9 @@ def main():
         {"name": "John", "gender": "M", "skill": 7},
         {"name": "Joyce", "gender": "F", "skill": 5},
         {"name": "Julia", "gender": "F", "skill": 4},
-        {"name": "Julie", "gender": "F", "skill": 4},        
+        {"name": "Julie", "gender": "F", "skill": 4},
         {"name": "Kevan", "gender": "M", "skill": 5},
-        {"name": "Kim", "gender": "F", "skill": 4},        
+        {"name": "Kim", "gender": "F", "skill": 4},
         {"name": "Leah", "gender": "F", "skill": 4},
         {"name": "Linda", "gender": "F", "skill": 6},
         {"name": "Lindsey", "gender": "F", "skill": 5},
@@ -636,317 +460,185 @@ def main():
     ]
     REGULAR_PLAYERS = sorted(REGULAR_PLAYERS, key=lambda x: x["name"])
 
+    # ------------ skill adjustments (optional) ------------
     st.header("👥 Select Regular Players")
-    # NEW: Collapsible expander for adjusting regular player skill levels (temporary).
-    with st.expander("⚙️ Adjust Regular Player Skill Levels (temporary). Speak to Scott for permanent changes.", expanded=False):
-        st.write("Modify skill levels for each regular player:")
-        num_cols_skill = 4
-        n_players = len(REGULAR_PLAYERS)
-        num_per_col_skill = math.ceil(n_players / num_cols_skill)
-        cols_skill = st.columns(num_cols_skill)
-        for col_idx in range(num_cols_skill):
-            with cols_skill[col_idx]:
-                for row_idx in range(num_per_col_skill):
-                    index = col_idx * num_per_col_skill + row_idx
-                    if index < n_players:
-                        new_val = st.number_input(f"{REGULAR_PLAYERS[index]['name']}",
-                                                  min_value=1, max_value=10,
-                                                  value=REGULAR_PLAYERS[index]['skill'],
-                                                  key=f"skill_{REGULAR_PLAYERS[index]['name']}")
-                        REGULAR_PLAYERS[index]['skill'] = new_val
+    with st.expander("⚙️ Adjust Regular Player Skill Levels "
+                     "(temporary). Speak to Scott for permanent changes.",
+                     expanded=False):
+        cols_s  = st.columns(4)
+        per_col = math.ceil(len(REGULAR_PLAYERS) / 4)
+        for c in range(4):
+            with cols_s[c]:
+                for r in range(per_col):
+                    idx = c * per_col + r
+                    if idx < len(REGULAR_PLAYERS):
+                        p = REGULAR_PLAYERS[idx]
+                        p["skill"] = st.number_input(p["name"], 1, 10, p["skill"],
+                                                     key=f"skill_{p['name']}")
 
-    num_cols = 4
-    n_players = len(REGULAR_PLAYERS)
-    num_per_col = math.ceil(n_players / num_cols)
-    cols_players = st.columns(num_cols)
-    for col_idx in range(num_cols):
-        with cols_players[col_idx]:
-            for row_idx in range(num_per_col):
-                i = col_idx * num_per_col + row_idx
-                if i < n_players:
-                    player = REGULAR_PLAYERS[i]
-                    label = player["name"]
-                    selected = st.checkbox(label, key=f"player_{player['name']}{i}", value=False)
-                    if selected:
-                        if st.session_state["player_selection_order"].get(player["name"]) is None:
-                            st.session_state["player_selection_order"][player["name"]] = st.session_state["player_counter"]
+    # ------------ player selection ------------------------
+    per_col = math.ceil(len(REGULAR_PLAYERS) / 4)
+    cols_p  = st.columns(4)
+    for c in range(4):
+        with cols_p[c]:
+            for r in range(per_col):
+                idx = c * per_col + r
+                if idx < len(REGULAR_PLAYERS):
+                    p = REGULAR_PLAYERS[idx]
+                    sel = st.checkbox(p["name"], key=f"p_sel_{p['name']}{idx}")
+                    if sel:
+                        if st.session_state["player_selection_order"].get(p["name"]) is None:
+                            st.session_state["player_selection_order"][p["name"]] = st.session_state["player_counter"]
                             st.session_state["player_counter"] += 1
                     else:
-                        st.session_state["player_selection_order"][player["name"]] = None
+                        st.session_state["player_selection_order"][p["name"]] = None
 
-    ordered_selected = []
-    for player in REGULAR_PLAYERS:
-        order = st.session_state["player_selection_order"].get(player["name"])
-        if order is not None:
-            ordered_selected.append((player["name"], order))
-    ordered_selected.sort(key=lambda x: x[1])
-    selected_regular_players = [p[0] for p in ordered_selected]
+    ordered   = sorted([(n, o) for n, o in st.session_state["player_selection_order"].items()
+                        if o is not None], key=lambda x: x[1])
+    sel_names = [n for n, _ in ordered]
 
+    # ------------ guest players ---------------------------
     with st.expander("➕ Add Up to 8 Guest Players (optional)", expanded=False):
         guest_players = []
-        for i in range(8):
-            col_name, col_gender, col_skill = st.columns([2, 1, 1])
-            guest_name = col_name.text_input(f"Guest Player {i+1}", key=f"guest_player_{i+1}")
-            guest_gender = col_gender.radio("", ["F", "M"], key=f"guest_gender_{i+1}", horizontal=True)
-            guest_skill = col_skill.number_input("Skill", min_value=1, max_value=10, value=5, key=f"guest_skill_{i+1}")
-            if guest_name.strip():
-                guest_players.append((guest_name.strip(), guest_gender, guest_skill))
+        for gi in range(8):
+            cn, cg, cs = st.columns([2, 1, 1])
+            gname  = cn.text_input(f"Guest Player {gi+1}", key=f"g_nm_{gi}")
+            ggen   = cg.radio("", ["F", "M"], horizontal=True, key=f"g_gen_{gi}")
+            gskill = cs.number_input("Skill", 1, 10, 5, key=f"g_sk_{gi}")
+            if gname.strip():
+                guest_players.append((gname.strip(), ggen, gskill))
 
-    raw_player_names_with_gender = []
-    raw_player_names_no_gender = []
-    final_player_genders = []
-    final_player_skills = []
+    # assemble final player arrays
+    raw_wg, raw_ng, genders, skills = [], [], [], []
+    for n in sel_names:
+        p = next(x for x in REGULAR_PLAYERS if x["name"] == n)
+        sym = "<span style='color:magenta;font-weight:bold;'>♀</span>" if p["gender"] == "F" \
+              else "<span style='color:cyan;font-weight:bold;'>♂</span>"
+        raw_wg.append(f"{p['name']} {sym}")
+        raw_ng.append(p["name"])
+        genders.append(p["gender"]); skills.append(p["skill"])
+    for n, g, s in guest_players:
+        sym = "<span style='color:magenta;font-weight:bold;'>♀</span>" if g == "F" \
+              else "<span style='color:cyan;font-weight:bold;'>♂</span>"
+        raw_wg.append(f"{n} {sym}"); raw_ng.append(n)
+        genders.append(g); skills.append(s)
 
-    for name in selected_regular_players:
-        for p in REGULAR_PLAYERS:
-            if p["name"] == name:
-                gsymbol = "<span style='color: magenta; font-weight: bold;'>♀</span>" if p["gender"] == "F" else "<span style='color: cyan; font-weight: bold;'>♂</span>"
-                raw_player_names_with_gender.append(f"{p['name']} {gsymbol}")
-                raw_player_names_no_gender.append(p["name"])
-                final_player_genders.append(p["gender"])
-                final_player_skills.append(p["skill"])
-                break
+    if len({x.lower() for x in raw_ng}) < len(raw_ng):
+        st.error("Duplicate player names detected."); st.stop()
 
-    for gname, ggender, gskill in guest_players:
-        if ggender == "F":
-            raw_player_names_with_gender.append(f"{gname} <span style='color: magenta; font-weight: bold;'>♀</span>")
-        else:
-            raw_player_names_with_gender.append(f"{gname} <span style='color: cyan; font-weight: bold;'>♂</span>")
-        raw_player_names_no_gender.append(gname)
-        final_player_genders.append(ggender)
-        final_player_skills.append(gskill)
+    players_wg = deduplicate_names(raw_wg)
+    players_ng = deduplicate_names(raw_ng)
 
-    # Check for duplicates based on base names (ignoring gender symbols)
-    base_names = [name.strip().lower() for name in raw_player_names_no_gender]
-    if len(set(base_names)) < len(base_names):
-        st.error("Duplicate player names detected (ignoring gender symbols). Please ensure all player names are unique.")
-        st.stop()
+    st.markdown("---\n**📋 Final Player List (rest order):**", unsafe_allow_html=True)
+    st.markdown("\n".join(f"{i+1}. {p}" for i, p in enumerate(players_wg)),
+                unsafe_allow_html=True)
 
-    player_names_with_gender = deduplicate_names(raw_player_names_with_gender)
-    player_names_no_gender = deduplicate_names(raw_player_names_no_gender)
-
-    st.write("---")
-    st.markdown("**📋 Final Player List (players rested in order of selection):**", unsafe_allow_html=True)
-    if player_names_with_gender:
-        player_markdown = ""
-        for idx, player in enumerate(player_names_with_gender, start=1):
-            player_markdown += f"{idx}. {player}\n"
-        st.markdown(player_markdown, unsafe_allow_html=True)
-    else:
-        st.write("No players selected.")
-
+    # ------------ court selection ------------------------
     st.header("🎾 Select Regular Courts")
-    REGULAR_COURTS = [f"Court {i}" for i in range(1, 17)]
-    num_courts = len(REGULAR_COURTS)
-    num_per_col_courts = math.ceil(len(REGULAR_COURTS) / num_cols)
-    cols_courts = st.columns(num_cols)
-    selected_regular_courts = []
-    for col_idx in range(num_cols):
-        with cols_courts[col_idx]:
-            for row_idx in range(num_per_col_courts):
-                i = col_idx * num_per_col_courts + row_idx
-                if i < len(REGULAR_COURTS):
-                    court = REGULAR_COURTS[i]
-                    if st.checkbox(court, key=f"court_{court}{i}"):
-                        selected_regular_courts.append(court)
+    REG_COURTS  = [f"Court {i}" for i in range(1, 17)]
+    per_col_c   = math.ceil(len(REG_COURTS) / 4)
+    cols_c      = st.columns(4)
+    sel_courts  = []
+    for c in range(4):
+        with cols_c[c]:
+            for r in range(per_col_c):
+                idx = c * per_col_c + r
+                if idx < len(REG_COURTS):
+                    if st.checkbox(REG_COURTS[idx], key=f"court_{idx}"):
+                        sel_courts.append(REG_COURTS[idx])
+
     with st.expander("➕ Add Up to 4 Custom Courts (optional)", expanded=False):
         custom_courts = []
-        cols_custom = st.columns(4)
         for i in range(4):
-            col = cols_custom[i]
-            c_court = col.text_input(f"Custom Court {i+1}", key=f"custom_court_{i+1}")
-            if c_court.strip():
-                custom_courts.append(c_court.strip())
-    court_names = selected_regular_courts + custom_courts
-    st.write("---")
-    st.markdown("**🏟️ Final Court List:**")
-    if court_names:
-        court_markdown = ""
-        for idx, court in enumerate(court_names, start=1):
-            court_markdown += f"{idx}. {court}\n"
-        st.markdown(court_markdown)
-    else:
-        st.write("No courts selected.")
+            cc = st.text_input(f"Custom Court {i+1}", key=f"cust_{i}")
+            if cc.strip():
+                custom_courts.append(cc.strip())
 
-    num_players_selected = len(player_names_with_gender)
-    courts_used = determine_courts_to_use(num_players_selected, len(court_names), 4)
-    max_unique = compute_max_unique_matchups(num_players_selected, courts_used, 4) if num_players_selected >= courts_used * 4 else 0
+    courts = sel_courts + custom_courts
+    st.markdown("---\n**🏟️ Final Court List:**")
+    st.markdown("\n".join(f"{i+1}. {c}" for i, c in enumerate(courts)) or "No courts selected.")
+
+    # ------------- configuration inputs ------------------
+    n_sel       = len(players_wg)
+    courts_used = determine_courts_to_use(n_sel, len(courts), 4)
+    max_unique  = compute_max_unique_matchups(n_sel, courts_used, 4) if n_sel >= courts_used*4 else 0
 
     st.header("⚙️ Configuration")
-    total_matches = st.number_input("🔢 How many matches do you want to schedule?", min_value=1, value=6)
-    num_schedules = st.number_input("🗂 How many schedules do you want to generate?", min_value=1, value=1)
-
-    default_samples = int(min(max_unique, 200000)) if max_unique else 200000
-    samples = st.number_input(
-        "🔍 Number of random combinations to try (larger = better results but takes longer to run)",
-        min_value=1,
-        value=default_samples,
-        step=50000
-    )
+    total_matches = st.number_input("🔢 Matches per schedule", 1, value=6)
+    num_sched     = st.number_input("🗂 Number of schedules", 1, value=1)
+    default_samples = int(min(max_unique, 200_000)) if max_unique else 200_000
+    samples       = st.number_input("🔍 Random combinations to try", 1,
+                                    value=default_samples, step=50_000)
     st.info(f"Approx. unique combinations: {int(max_unique):,}")
 
-    reject_mixed = st.checkbox("🏳️‍🌈 Prefer Same-Sex Play", value=False)
-    enable_skill = st.checkbox("🎯 Skill-based Matches", value=True)
-    # NEW: Checkbox for forcing Outi and Asmo to play together (enabled by default).
-    force_outi_asmo = st.checkbox("Always pair Outi & Asmo", value=True)
+    reject_mixed   = st.checkbox("🏳️‍🌈 Prefer Same-Sex Play", value=False)
+    enable_skill   = st.checkbox("🎯 Skill-based Matches", value=True)
+    force_pairing  = st.checkbox("Always pair Outi & Asmo", value=True)
     with st.expander("⚖️ Skill Penalty Weight", expanded=False):
-        skill_weight = st.number_input("Enter skill penalty weight", min_value=1, value=20)
+        skill_wt = st.number_input("Penalty weight", 1, value=20)
 
+    # ------------- generate button -----------------------
     if st.button("📅 Generate Schedule(s)"):
-        if num_players_selected < 4:
-            st.error("🚫 Need at least 4 players to schedule a match.")
-            st.stop()
-        if not court_names:
-            st.error("🚫 Please select or enter at least one court.")
-            st.stop()
+        if n_sel < 4:
+            st.error("Need at least 4 players."); st.stop()
+        if not courts:
+            st.error("Please select at least one court."); st.stop()
 
         st.session_state["all_schedules"].clear()
         st.session_state["all_stats"].clear()
-        st.session_state["date_str_uk"] = formatted_date
+        st.session_state["date_str_uk"] = date_str
 
         with st.spinner("🔄 Generating schedule..."):
-            for i in range(num_schedules):
-                st.info(f"Generating Schedule {i+1} of {num_schedules}...")
-                schedule_output, teammate_matrix, opponent_matrix, rest_tracker, all_matches_info = assign_matches(
-                    player_names=player_names_no_gender,
-                    player_genders=final_player_genders,
-                    player_skills=final_player_skills,
-                    court_names=court_names,
-                    court_size=4,
-                    total_matches=total_matches,
-                    samples=samples,
-                    reject_mixed=reject_mixed,
-                    enable_skill=enable_skill,
-                    skill_weight=skill_weight,
-                    force_outi_asmo=force_outi_asmo  # feature enabled by default
-                )
-                player_schedule_table = build_player_schedule_table(all_matches_info, player_names_no_gender, court_names)
-                
-                # Insert page breaks after every 3 match blocks, but avoid a trailing break if total matches divides evenly.
-                match_marker = '<div style="margin-bottom: 10px; box-shadow:'
-                match_blocks = schedule_output.split(match_marker)
-                if match_blocks[0].strip() == "":
-                    match_blocks = match_blocks[1:]
-                modified_schedule_output = ""
-                for index, block in enumerate(match_blocks):
-                    modified_schedule_output += match_marker + block
-                    if (index + 1) % 3 == 0 and (index + 1) < len(match_blocks):
-                        modified_schedule_output += "<div style='page-break-after: always;'></div>"
-                
-                schedule_html = f"""
-                <!DOCTYPE html>
-                <html lang="en">
-                <head>
-                    <meta charset="UTF-8">
-                    <title>Mijas Padellers Match Schedule - {formatted_date} (Version {i+1})</title>
-                    <style>
-                        body {{
-                            font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
-                            background-color: #ffffff;
-                            color: #000000;
-                            margin: 0;
-                            padding: 20px;
-                        }}
-                        .container {{
-                            max-width: 1200px;
-                            margin: 0 auto;
-                        }}
-                        h1 {{
-                            text-align: center;
-                            color: #333333;
-                            margin-bottom: 10px;
-                        }}
-                        h2 {{
-                            text-align: center;
-                            color: #666666;
-                            margin-bottom: 20px;
-                            font-size: 1.2em;
-                        }}
-                        table {{
-                            width: 100%;
-                            border-collapse: collapse;
-                            margin-bottom: 10px;
-                            table-layout: fixed;
-                        }}
-                        th, td {{
-                            padding: 6px;
-                            text-align: left;
-                            border: 1px solid #dddddd;
-                        }}
-                        th {{
-                            background-color: #f2f2f2;
-                            font-size: 1.1em;
-                        }}
-                        tr:nth-child(even) {{
-                            background-color: #f9f9f9;
-                        }}
-                        tr:nth-child(odd) {{
-                            background-color: #ffffff;
-                        }}
-                        tfoot td {{
-                            background-color: #f2f2f2;
-                            font-weight: bold;
-                            padding: 6px;
-                        }}
-                        @media print {{
-                            body {{
-                                margin: 0;
-                                padding: 0;
-                            }}
-                            .container {{
-                                width: 100%;
-                                margin: 0;
-                            }}
-                        }}
-                    </style>
-                </head>
-                <body>
-                    <div class="container">
-                        <h1>Mijas Padellers Match Schedule</h1>
-                        <h2>{formatted_date}</h2>
-                        {modified_schedule_output}
-                        <hr>
-                        <div style="page-break-before: always;">{player_schedule_table}</div>
-                    </div>
-                </body>
-                </html>
-                """
-                st.session_state["all_schedules"].append(schedule_html)
+            for s_no in range(num_sched):
+                st.info(f"Generating Schedule {s_no+1}/{num_sched}...")
+                sched_html, tm, om, rest, all_matches, used = assign_matches(
+                    players_ng, genders, skills, courts,
+                    total_matches=total_matches, samples=samples,
+                    reject_mixed=reject_mixed, enable_skill=enable_skill,
+                    skill_wt=skill_wt, force_outi_asmo=force_pairing)
 
-                stats_html = generate_Schedule_Statistics(
-                    teammate_matrix,
-                    opponent_matrix,
-                    rest_tracker,
-                    player_names_with_gender,
-                    all_matches_info,
-                    final_player_genders,
-                    final_player_skills,
-                    court_names
-                )
+                p_table = build_player_schedule_table(all_matches, players_ng, courts)
+                full_html = f"""
+                <!DOCTYPE html><html lang="en"><head><meta charset="UTF-8">
+                <title>Mijas Padellers Match Schedule - {date_str} (v{s_no+1})</title>
+                <style>
+                    body{{font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;background:#fff;color:#000;margin:0;padding:20px;}}
+                    table{{width:100%;border-collapse:collapse;margin-bottom:10px;table-layout:fixed;}}
+                    th,td{{padding:6px;border:1px solid #ddd;text-align:left;}}
+                    th{{background:#f2f2f2;font-size:1.1em;}}
+                    tr:nth-child(even){{background:#f9f9f9;}}
+                    @media print{{body{{margin:0;padding:0;}}}}
+                </style></head><body><div class='container'>
+                <h1 style='text-align:center;'>Mijas Padellers Match Schedule</h1>
+                <h2 style='text-align:center;'>{date_str}</h2>
+                {sched_html}<hr><div style='page-break-before:always;'>{p_table}</div>
+                </div></body></html>"""
+
+                st.session_state["all_schedules"].append(full_html)
+
+                stats_html = generate_Schedule_Statistics(tm, om, rest,
+                                                          players_wg,
+                                                          all_matches,
+                                                          genders, skills,
+                                                          courts)
                 st.session_state["all_stats"].append(stats_html)
-        st.success("Schedule generated successfully!")
+        st.success("Schedule(s) generated successfully!")
 
+    # ---------------- downloads --------------------------
     if st.session_state["all_schedules"]:
-        st.subheader("📥 Download Your Schedule")
-        date_str_uk = st.session_state["date_str_uk"] or "Schedule"
-        for i, schedule_html in enumerate(st.session_state["all_schedules"]):
-            schedule_filename = f"Schedule_{i+1}_{date_str_uk.replace(' ', '_')}.html"
-            st.download_button(
-                label=f"📄 Download Schedule {i+1}",
-                data=schedule_html,
-                file_name=schedule_filename,
-                mime="text/html"
-            )
-            stats_html = st.session_state["all_stats"][i]
-            if stats_html:
-                stats_filename = f"Schedule_Statistics_{i+1}_{date_str_uk.replace(' ', '_')}.html"
-                st.download_button(
-                    label=f"📄 Download Statistics {i+1}",
-                    data=stats_html,
-                    file_name=stats_filename,
-                    mime="text/html"
-                )
+        st.subheader("📥 Download")
+        for i, sched in enumerate(st.session_state["all_schedules"]):
+            fn = f"Schedule_{i+1}_{date_str.replace(' ','_')}.html"
+            st.download_button(f"📄 Schedule {i+1}", sched, fn, "text/html")
+            fn_stat = f"Schedule_Statistics_{i+1}_{date_str.replace(' ','_')}.html"
+            st.download_button(f"📄 Statistics {i+1}",
+                               st.session_state["all_stats"][i],
+                               fn_stat, "text/html")
         st.divider()
 
+
+# --------------------------------------------------------------------------- #
+#  program entry                                                              #
+# --------------------------------------------------------------------------- #
 if __name__ == "__main__":
     main()
