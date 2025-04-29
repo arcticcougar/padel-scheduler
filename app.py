@@ -1,6 +1,6 @@
 ###############################################################################
 #  Mijas Padellers Match Scheduler – Streamlit application                    #
-#  Last updated: 18 Apr 2025 – dynamic print page‑breaks & stats‑bug fix      #
+#  Last updated: 29 Apr 2025 – Added Ronan to players list                    #
 ###############################################################################
 import streamlit as st
 import itertools
@@ -446,6 +446,7 @@ def main():
         {"name": "Outi", "gender": "F", "skill": 5},
         {"name": "Paola", "gender": "F", "skill": 4},
         {"name": "Paul", "gender": "M", "skill": 7},
+        {"name": "Ronan", "gender": "M", "skill": 7},
         {"name": "Ruth", "gender": "F", "skill": 4},
         {"name": "Sandy", "gender": "F", "skill": 5},
         {"name": "Scott", "gender": "M", "skill": 7},
