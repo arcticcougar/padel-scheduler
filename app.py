@@ -407,7 +407,8 @@ def main():
 
     # ----------------- player master list ---------------
     REGULAR_PLAYERS = [
-        {"name": "Asmo", "gender": "M", "skill": 5},
+        {"name": "Aideen", "gender": "F", "skill": 5},
+        {"name": "Asmo", "gender": "M", "skill": 6},
         {"name": "Agneta", "gender": "F", "skill": 5},
         {"name": "Anna", "gender": "F", "skill": 4},
         {"name": "Anny", "gender": "F", "skill": 5},
@@ -415,7 +416,7 @@ def main():
         {"name": "Bill", "gender": "M", "skill": 7},
         {"name": "Chris", "gender": "M", "skill": 6},
         {"name": "Christine", "gender": "F", "skill": 4},
-        {"name": "Colin", "gender": "M", "skill": 5},
+        {"name": "Colin", "gender": "M", "skill": 6},
         {"name": "Cris Burgos", "gender": "F", "skill": 4},
         {"name": "Daryoush", "gender": "M", "skill": 5},
         {"name": "Dave", "gender": "M", "skill": 7},
