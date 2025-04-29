@@ -1,6 +1,6 @@
 ###############################################################################
-#  Mijas Padellers Match Scheduler – Streamlit application                    #
-#  Last updated: 29 Apr 2025 – Added Ronan to players list                    #
+#  Mijas Padellers Match Scheduler – Streamlit application                    #
+#  Last updated: 29 Apr 2025 – Guest-player order now preserved               #
 ###############################################################################
 import streamlit as st
 import itertools
@@ -42,12 +42,12 @@ def compute_max_unique_matchups(N, K, S):
     return 0 if N < M else comb(N, M) * factorial(M) // ((factorial(S) ** K) * factorial(K))
 
 def canonical_config(group):
-    """Return an order‑invariant tuple identifying a 4‑player matchup."""
+    """Return an order-invariant tuple identifying a 4-player matchup."""
     t1 = tuple(sorted(group[:2])); t2 = tuple(sorted(group[2:4]))
     return tuple(sorted([t1, t2]))
 
 # --------------------------------------------------------------------------- #
-#  Match‑quality scoring & search                                             #
+#  Match-quality scoring & search                                             #
 # --------------------------------------------------------------------------- #
 def evaluate_match(groups, teammate_mtx, opponent_mtx, reject_mixed, genders,
                    available, court_size, enable_skill, skills, skill_wt,
@@ -95,6 +95,7 @@ def evaluate_match(groups, teammate_mtx, opponent_mtx, reject_mixed, genders,
             score += 10000
     return score
 
+
 def find_best_match(players, n_courts, court_sz, teammate_mtx, opponent_mtx,
                     match_no, samples=100000, reject_mixed=False,
                     genders=None, enable_skill=False, skills=None, skill_wt=20,
@@ -117,6 +118,7 @@ def find_best_match(players, n_courts, court_sz, teammate_mtx, opponent_mtx,
     bar.progress(100); status.write(f"Match {match_no+1} best match found!")
     return best
 
+
 def update_matrices_for_match(groups, teammate_mtx, opponent_mtx):
     for g in groups:
         t1, t2 = g[:2], g[2:]
@@ -128,11 +130,14 @@ def update_matrices_for_match(groups, teammate_mtx, opponent_mtx):
             for j in t2:
                 opponent_mtx[i][j] += 1; opponent_mtx[j][i] += 1
 
+
 def select_bench_players(players, rest_track, n_bench):
     return sorted(players, key=lambda x: rest_track[x])[:n_bench]
 
+
 def determine_courts_to_use(n_players, available_courts, court_sz=4):
     return min(available_courts, n_players // court_sz)
+
 
 def deduplicate_names(names):
     seen, out = {}, []
@@ -197,8 +202,8 @@ def format_debug_schedule_html(all_matches, genders, skills, names, courts):
               <th style='width:15%;padding:6px;border-bottom:2px solid #ddd;'>Court</th>
               <th style='width:25%;padding:6px;border-bottom:2px solid #ddd;'>Team&nbsp;1</th>
               <th style='width:25%;padding:6px;border-bottom:2px solid #ddd;'>Team&nbsp;2</th>
-              <th style='width:10%;padding:6px;border-bottom:2px solid #ddd;text-align:center;'>T1 Skill</th>
-              <th style='width:10%;padding:6px;border-bottom:2px solid #ddd;text-align:center;'>T2 Skill</th>
+              <th style='width:10%;padding:6px;border-bottom:2px solid #ddd;text-align:center;'>T1 Skill</th>
+              <th style='width:10%;padding:6px;border-bottom:2px solid #ddd;text-align:center;'>T2 Skill</th>
               <th style='width:15%;padding:6px;border-bottom:2px solid #ddd;text-align:center;'>Diff</th>
             </tr></thead><tbody>"""
         for cid, g in enumerate(groups):
@@ -221,6 +226,7 @@ def format_debug_schedule_html(all_matches, genders, skills, names, courts):
           </table></div>"""
     return dbg
 
+
 def build_player_schedule_table(all_matches, names, courts):
     n_matches = len(all_matches)
     sorted_idx = sorted(range(len(names)), key=lambda i: names[i].lower().strip())
@@ -228,7 +234,7 @@ def build_player_schedule_table(all_matches, names, courts):
     table = ["<h2>Player Schedule Summary</h2>",
              "<table style='width:100%;border-collapse:collapse;table-layout:fixed;'><thead><tr style='background:#f0f0f0;text-align:center;'>",
              "<th style='width:20%;padding:6px;border-bottom:2px solid #ddd;'>Player</th>"]
-    table += [f"<th style='width:{col_w}%;padding:6px;border-bottom:2px solid #ddd;'>Match {i+1}</th>"
+    table += [f"<th style='width:{col_w}%;padding:6px;border-bottom:2px solid #ddd;'>Match {i+1}</th>"
               for i in range(n_matches)]
     table += ["</tr></thead><tbody>"]
     for idx in sorted_idx:
@@ -244,6 +250,7 @@ def build_player_schedule_table(all_matches, names, courts):
         table.append("</tr>")
     table.append("</tbody></table>")
     return "".join(table)
+
 
 def format_statistics_html(stats, date_str_uk, all_matches, genders):
     explanation = (
@@ -270,8 +277,9 @@ def format_statistics_html(stats, date_str_uk, all_matches, genders):
       {explanation}<pre style='white-space:pre-wrap;line-height:1.5em;'>{stats}</pre>
     </div></div></body></html>"""
 
+
 # --------------------------------------------------------------------------- #
-#  Statistics generator (bug‑fixed)                                           #
+#  Statistics generator (bug-fixed)                                           #
 # --------------------------------------------------------------------------- #
 def generate_Schedule_Statistics(team_mtx, opp_mtx, rest_track, names,
                                  all_matches, genders, skills, courts):
@@ -319,8 +327,10 @@ def generate_Schedule_Statistics(team_mtx, opp_mtx, rest_track, names,
     p_table = build_player_schedule_table(all_matches, names, courts)
     return base.replace("</body>",
                         f"{debug}<div style='page-break-before: always;'>{p_table}</div></body>")
+
+
 # --------------------------------------------------------------------------- #
-#  Core scheduler with reliable page‑break insertion                          #
+#  Core scheduler with reliable page-break insertion                          #
 # --------------------------------------------------------------------------- #
 def assign_matches(names, genders, skills, courts, court_sz=4, total_matches=6,
                    samples=100000, reject_mixed=False, enable_skill=False,
@@ -495,10 +505,6 @@ def main():
                     else:
                         st.session_state["player_selection_order"][p["name"]] = None
 
-    ordered   = sorted([(n, o) for n, o in st.session_state["player_selection_order"].items()
-                        if o is not None], key=lambda x: x[1])
-    sel_names = [n for n, _ in ordered]
-
     # ------------ guest players ---------------------------
     with st.expander("➕ Add Up to 8 Guest Players (optional)", expanded=False):
         guest_players = []
@@ -507,23 +513,54 @@ def main():
             gname  = cn.text_input(f"Guest Player {gi+1}", key=f"g_nm_{gi}")
             ggen   = cg.radio("", ["F", "M"], horizontal=True, key=f"g_gen_{gi}")
             gskill = cs.number_input("Skill", 1, 10, 5, key=f"g_sk_{gi}")
+
             if gname.strip():
-                guest_players.append((gname.strip(), ggen, gskill))
+                name = gname.strip()
+                # give every new guest an order slot
+                if st.session_state["player_selection_order"].get(name) is None:
+                    st.session_state["player_selection_order"][name] = st.session_state["player_counter"]
+                    st.session_state["player_counter"] += 1
+                guest_players.append((name, ggen, gskill))
+            else:
+                # if the box was cleared, drop it from the order map
+                prior = st.session_state["player_selection_order"].get(gname.strip())
+                if prior is not None:
+                    st.session_state["player_selection_order"][gname.strip()] = None
+
+    # ----------- build unified ordered list ---------------
+    # ticked regulars
+    chosen_regulars = [p["name"]
+                       for idx, p in enumerate(REGULAR_PLAYERS)
+                       if st.session_state.get(f"p_sel_{p['name']}{idx}", False)]
+    # guests with non-blank names
+    guest_names = [g[0] for g in guest_players]
+
+    all_current = set(chosen_regulars + guest_names)
+    ordered = sorted(
+        [(n, o) for n, o in st.session_state["player_selection_order"].items()
+         if o is not None and n in all_current],
+        key=lambda x: x[1]
+    )
+    sel_names = [n for n, _ in ordered]   # ✅ regulars + guests in true entry order
 
     # assemble final player arrays
     raw_wg, raw_ng, genders, skills = [], [], [], []
     for n in sel_names:
-        p = next(x for x in REGULAR_PLAYERS if x["name"] == n)
-        sym = "<span style='color:magenta;font-weight:bold;'>♀</span>" if p["gender"] == "F" \
-              else "<span style='color:cyan;font-weight:bold;'>♂</span>"
-        raw_wg.append(f"{p['name']} {sym}")
-        raw_ng.append(p["name"])
-        genders.append(p["gender"]); skills.append(p["skill"])
-    for n, g, s in guest_players:
-        sym = "<span style='color:magenta;font-weight:bold;'>♀</span>" if g == "F" \
-              else "<span style='color:cyan;font-weight:bold;'>♂</span>"
-        raw_wg.append(f"{n} {sym}"); raw_ng.append(n)
-        genders.append(g); skills.append(s)
+        # is it a regular?
+        reg = next((x for x in REGULAR_PLAYERS if x["name"] == n), None)
+        if reg:
+            p = reg
+            sym = "<span style='color:magenta;font-weight:bold;'>♀</span>" if p["gender"] == "F" \
+                  else "<span style='color:cyan;font-weight:bold;'>♂</span>"
+            raw_wg.append(f"{p['name']} {sym}")
+            raw_ng.append(p["name"])
+            genders.append(p["gender"]); skills.append(p["skill"])
+        else:
+            g = next(x for x in guest_players if x[0] == n)
+            sym = "<span style='color:magenta;font-weight:bold;'>♀</span>" if g[1] == "F" \
+                  else "<span style='color:cyan;font-weight:bold;'>♂</span>"
+            raw_wg.append(f"{g[0]} {sym}"); raw_ng.append(g[0])
+            genders.append(g[1]); skills.append(g[2])
 
     if len({x.lower() for x in raw_ng}) < len(raw_ng):
         st.error("Duplicate player names detected."); st.stop()
