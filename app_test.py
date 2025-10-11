@@ -202,6 +202,7 @@ def format_debug_schedule_html(all_matches, genders, skills, names, courts):
               <th style='width:15%;padding:6px;border-bottom:2px solid #ddd;'>Court</th>
               <th style='width:25%;padding:6px;border-bottom:2px solid #ddd;'>Team&nbsp;1</th>
               <th style='width:25%;padding:6px;border-bottom:2px solid #ddd;'>Team&nbsp;2</th>
+              <th style='width:10%;padding:6px;border-bottom:2px solid #ddd;text-align:center;'>Same Sex</th>
               <th style='width:10%;padding:6px;border-bottom:2px solid #ddd;text-align:center;'>T1 Skill</th>
               <th style='width:10%;padding:6px;border-bottom:2px solid #ddd;text-align:center;'>T2 Skill</th>
               <th style='width:15%;padding:6px;border-bottom:2px solid #ddd;text-align:center;'>Diff</th>
@@ -211,18 +212,22 @@ def format_debug_schedule_html(all_matches, genders, skills, names, courts):
             t1_s = sum(skills[i] for i in t1); t2_s = sum(skills[i] for i in t2)
             t1_str = " & ".join(f"{names[i]} ({skills[i]})" for i in t1)
             t2_str = " & ".join(f"{names[i]} ({skills[i]})" for i in t2)
+            # Determine if the game is same-sex (all players M or all F)
+            gs = [genders[i] for i in g]
+            same_sex_cell = ("♂" if all(x == "M" for x in gs) else ("♀" if all(x == "F" for x in gs) else "No"))
             row_bg = "#ffffff" if cid % 2 == 0 else "#f9f9f9"
             dbg += f"""
               <tr style='background:{row_bg};'><td style='padding:6px;border-bottom:1px solid #ddd;'>{courts[cid]}</td>
               <td style='padding:6px;border-bottom:1px solid #ddd;'>{t1_str}</td>
               <td style='padding:6px;border-bottom:1px solid #ddd;'>{t2_str}</td>
+              <td style='padding:6px;border-bottom:1px solid #ddd;text-align:center;'>{same_sex_cell}</td>
               <td style='padding:6px;border-bottom:1px solid #ddd;text-align:center;'>{t1_s}</td>
               <td style='padding:6px;border-bottom:1px solid #ddd;text-align:center;'>{t2_s}</td>
               <td style='padding:6px;border-bottom:1px solid #ddd;text-align:center;'>{abs(t1_s-t2_s)}</td></tr>"""
         rest_names = ", ".join(f"{names[p]} ({skills[p]})" for p in bench) if bench else "None"
         dbg += f"""
             </tbody><tfoot><tr><td style='padding:6px;background:#f0f0f0;font-weight:bold;'>Resting</td>
-            <td style='padding:6px;background:#f0f0f0;' colspan='5'>{rest_names}</td></tr></tfoot>
+            <td style='padding:6px;background:#f0f0f0;' colspan='6'>{rest_names}</td></tr></tfoot>
           </table></div>"""
     return dbg
 
@@ -630,10 +635,10 @@ def main():
 
     reject_mixed   = st.checkbox("🏳️‍🌈 Prefer Same-Sex Play", value=False)
     same_sex_matches_count = st.number_input(
-        "Number of initial matches to prefer same-sex", 0, value=0
+        "Number of initial matches to prefer same-sex play", 0, value=0
     )
     enable_skill   = st.checkbox("🎯 Skill-based Matches", value=True)
-    force_pairing  = st.checkbox("Always pair Outi & Asmo", value=True)
+    force_pairing  = st.checkbox("Always pair Outi & Asmo", value=False)
     with st.expander("⚖️ Skill Penalty Weight", expanded=False):
         skill_wt = st.number_input("Penalty weight", 1, value=20)
 
