@@ -439,8 +439,10 @@ def main():
         {"name": "Glynis", "gender": "F", "skill": 4},
         {"name": "Heather", "gender": "F", "skill": 5},
         {"name": "Janet", "gender": "F", "skill": 5},
-        {"name": "John", "gender": "M", "skill": 7},
+        {"name": "John F.", "gender": "M", "skill": 6},
+        {"name": "John S.", "gender": "M", "skill": 7},
         {"name": "Joyce", "gender": "F", "skill": 5},
+        {"name": "Judy", "gender": "F", "skill": 5},
         {"name": "Julia", "gender": "F", "skill": 4},
         {"name": "Julie", "gender": "F", "skill": 4},
         {"name": "Katty", "gender": "F", "skill": 5},
@@ -679,6 +681,9 @@ def main():
                                st.session_state["all_stats"][i],
                                fn_stat, "text/html")
         st.divider()
+
+    # ------------- footer note ----------------------------
+    st.caption("In loving memory of Frankie. The bestest boy 🐶")
 
 
 # --------------------------------------------------------------------------- #
