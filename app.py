@@ -152,6 +152,27 @@ def deduplicate_names(names):
             seen[new] = 1; out.append(new)
     return out
 
+# Determine which match indices (0-based) should prefer same-sex play.
+# Strategy: evenly space N indices across 0..total_matches-1, always including the last match.
+def compute_same_sex_match_indices(total_matches: int, count: int):
+    if count <= 0 or total_matches <= 0:
+        return []
+    last_idx = total_matches - 1
+    # Evenly spaced using rounding; i runs 1..count, guaranteeing last_idx is included for i=count
+    raw = [round(i * last_idx / count) for i in range(1, count + 1)]
+    # Deduplicate while preserving order
+    seen = set(); indices = []
+    for idx in raw:
+        if 0 <= idx <= last_idx and idx not in seen:
+            indices.append(idx); seen.add(idx)
+    # Ensure we have exactly 'count' indices by adding earlier slots if duplicates collapsed
+    probe = last_idx - 1
+    while len(indices) < count and probe >= 0:
+        if probe not in seen:
+            indices.insert(0, probe); seen.add(probe)
+        probe -= 1
+    return sorted(indices)
+
 # --------------------------------------------------------------------------- #
 #  HTML builders                                                              #
 # --------------------------------------------------------------------------- #
@@ -362,6 +383,9 @@ def assign_matches(names, genders, skills, courts, court_sz=4, total_matches=6,
         except ValueError:
             pass   # one or both not present
 
+    # Pre-compute which matches will prefer same-sex (N spaced matches ending with the last)
+    spaced_same_sex = compute_same_sex_match_indices(total_matches, same_sex_matches_count)
+
     for m_no in range(total_matches):
         st.info(f"--- Assigning players for Match {m_no+1} ---")
 
@@ -379,11 +403,10 @@ def assign_matches(names, genders, skills, courts, court_sz=4, total_matches=6,
                     benched.remove(o_idx)
                 available.append(o_idx)
 
-        # Apply same-sex preference only for the first N matches if requested.
-        # Precedence: if a positive count is set, it overrides the checkbox
-        # so that only the first N matches prefer same-sex pairings.
+        # Apply same-sex preference for specifically chosen matches when count>0,
+        # otherwise fall back to the checkbox behavior for all matches.
         effective_reject_mixed = (
-            (m_no < same_sex_matches_count)
+            (m_no in spaced_same_sex)
             if same_sex_matches_count > 0
             else bool(reject_mixed)
         )
@@ -706,8 +729,9 @@ def main():
                                                           genders, skills,
                                                           courts)
                 # Inject configuration summary at top of stats page
+                spaced_same_sex = compute_same_sex_match_indices(total_matches, same_sex_matches_count)
                 cfg_same_sex = "Yes" if (reject_mixed or same_sex_matches_count > 0) else "No"
-                cfg_same_sex_matches = same_sex_matches_count
+                cfg_same_sex_matches = ", ".join(str(i+1) for i in spaced_same_sex) if spaced_same_sex else ("All" if reject_mixed else "0")
                 cfg_skill = "Yes" if enable_skill else "No"
                 cfg_pair = "Yes" if force_pairing else "No"
                 cfg_html = (
@@ -715,7 +739,7 @@ def main():
                     f"<h3 style='margin:0 0 8px 0;'>Configuration</h3>"
                     f"<ul style='margin:0 0 0 18px;padding:0;'>"
                     f"<li>Skill-based: {cfg_skill}</li>"
-                    f"<li>Same-sex preferred: {cfg_same_sex} (first {cfg_same_sex_matches} matches)</li>"
+                    f"<li>Same-sex preferred: {cfg_same_sex} (matches: {cfg_same_sex_matches})</li>"
                     f"<li>Always pair Outi & Asmo: {cfg_pair}</li>"
                     f"</ul></div>"
                 )
