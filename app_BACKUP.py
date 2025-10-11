@@ -334,8 +334,7 @@ def generate_Schedule_Statistics(team_mtx, opp_mtx, rest_track, names,
 # --------------------------------------------------------------------------- #
 def assign_matches(names, genders, skills, courts, court_sz=4, total_matches=6,
                    samples=100000, reject_mixed=False, enable_skill=False,
-                   skill_wt=20, force_outi_asmo=False,
-                   same_sex_matches_count=0):
+                   skill_wt=20, force_outi_asmo=False):
     n_players   = len(names)
     courts_used = determine_courts_to_use(n_players, len(courts), court_sz)
 
@@ -370,12 +369,9 @@ def assign_matches(names, genders, skills, courts, court_sz=4, total_matches=6,
                     benched.remove(o_idx)
                 available.append(o_idx)
 
-        # Apply same-sex preference only for the first N matches if requested
-        effective_reject_mixed = bool(reject_mixed or (m_no < same_sex_matches_count))
-
         best = find_best_match(available, courts_used, court_sz,
                                teammate_mtx, opponent_mtx, m_no, samples,
-                               effective_reject_mixed, genders, enable_skill, skills,
+                               reject_mixed, genders, enable_skill, skills,
                                skill_wt, history, forced_pair)
 
         if best:
@@ -623,9 +619,6 @@ def main():
     st.info(f"Approx. unique combinations: {int(max_unique):,}")
 
     reject_mixed   = st.checkbox("🏳️‍🌈 Prefer Same-Sex Play", value=False)
-    same_sex_matches_count = st.number_input(
-        "Number of initial matches to prefer same-sex", 0, value=0
-    )
     enable_skill   = st.checkbox("🎯 Skill-based Matches", value=True)
     force_pairing  = st.checkbox("Always pair Outi & Asmo", value=True)
     with st.expander("⚖️ Skill Penalty Weight", expanded=False):
@@ -649,8 +642,7 @@ def main():
                     players_ng, genders, skills, courts,
                     total_matches=total_matches, samples=samples,
                     reject_mixed=reject_mixed, enable_skill=enable_skill,
-                    skill_wt=skill_wt, force_outi_asmo=force_pairing,
-                    same_sex_matches_count=same_sex_matches_count)
+                    skill_wt=skill_wt, force_outi_asmo=force_pairing)
 
                 p_table = build_player_schedule_table(all_matches, players_ng, courts)
                 full_html = f"""
