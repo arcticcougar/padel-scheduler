@@ -595,6 +595,11 @@ def main():
     st.markdown("\n".join(f"{i+1}. {p}" for i, p in enumerate(players_wg)),
                 unsafe_allow_html=True)
 
+    # Totals by gender for selected players
+    male_count   = sum(1 for g in genders if g == "M")
+    female_count = sum(1 for g in genders if g == "F")
+    st.markdown(f"**Totals:** {male_count} Men ♂, {female_count} Women ♀")
+
     # ------------ court selection ------------------------
     st.header("🎾 Select Regular Courts")
     REG_COURTS  = [f"Court {i}" for i in range(1, 17)]
