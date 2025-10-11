@@ -598,12 +598,14 @@ def main():
     # Totals by gender for selected players
     male_count   = sum(1 for g in genders if g == "M")
     female_count = sum(1 for g in genders if g == "F")
-    male_sym     = "<span style='color:cyan;font-weight:bold;'>♂</span>"
-    female_sym   = "<span style='color:magenta;font-weight:bold;'>♀</span>"
-    male_word    = "<span style='color:cyan;font-weight:bold;'>Men</span>"
-    female_word  = "<span style='color:magenta;font-weight:bold;'>Women</span>"
+    male_sym     = "<span style='color:cyan;'>♂</span>"
+    female_sym   = "<span style='color:magenta;'>♀</span>"
+    male_word    = "<span style='color:cyan;'>Men</span>"
+    female_word  = "<span style='color:magenta;'>Women</span>"
+    male_num     = f"<span style='color:cyan;'>{male_count}</span>"
+    female_num   = f"<span style='color:magenta;'>{female_count}</span>"
     st.markdown(
-        f"**Totals:** {male_count} {male_word} {male_sym}, {female_count} {female_word} {female_sym}",
+        f"**Totals:** {male_num} {male_word} {male_sym}, {female_num} {female_word} {female_sym}",
         unsafe_allow_html=True
     )
 
