@@ -214,7 +214,10 @@ def format_debug_schedule_html(all_matches, genders, skills, names, courts):
             t2_str = " & ".join(f"{names[i]} ({skills[i]})" for i in t2)
             # Determine if the game is same-sex (all players M or all F)
             gs = [genders[i] for i in g]
-            same_sex_cell = ("♂" if all(x == "M" for x in gs) else ("♀" if all(x == "F" for x in gs) else "No"))
+            same_sex_cell = (
+                "<span style='color:cyan;'>♂</span>" if all(x == "M" for x in gs)
+                else ("<span style='color:magenta;'>♀</span>" if all(x == "F" for x in gs) else "No")
+            )
             row_bg = "#ffffff" if cid % 2 == 0 else "#f9f9f9"
             dbg += f"""
               <tr style='background:{row_bg};'><td style='padding:6px;border-bottom:1px solid #ddd;'>{courts[cid]}</td>
@@ -647,9 +650,9 @@ def main():
                                     value=default_samples, step=50_000)
     st.info(f"Approx. unique combinations: {int(max_unique):,}")
 
-    reject_mixed   = st.checkbox("🏳️‍🌈 Prefer Same-Sex Play", value=False)
+    reject_mixed   = st.checkbox("🏳️‍🌈 Prefer Same-Sex Play", value=True)
     same_sex_matches_count = st.number_input(
-        "Number of initial matches to prefer same-sex play", 0, value=0
+        "Number of initial matches to prefer same-sex play", 0, value=3
     )
     enable_skill   = st.checkbox("🎯 Skill-based Matches", value=True)
     force_pairing  = st.checkbox("Always pair Outi & Asmo", value=False)
@@ -701,6 +704,25 @@ def main():
                                                           all_matches,
                                                           genders, skills,
                                                           courts)
+                # Inject configuration summary at top of stats page
+                cfg_same_sex = "Yes" if (reject_mixed or same_sex_matches_count > 0) else "No"
+                cfg_same_sex_matches = same_sex_matches_count
+                cfg_skill = "Yes" if enable_skill else "No"
+                cfg_pair = "Yes" if force_pairing else "No"
+                cfg_html = (
+                    f"<div style='background:#eef6ff;border:1px solid #cce0ff;padding:10px;border-radius:8px;margin-bottom:10px;'>"
+                    f"<h3 style='margin:0 0 8px 0;'>Configuration</h3>"
+                    f"<ul style='margin:0 0 0 18px;padding:0;'>"
+                    f"<li>Skill-based: {cfg_skill}</li>"
+                    f"<li>Same-sex preferred: {cfg_same_sex} (first {cfg_same_sex_matches} matches)</li>"
+                    f"<li>Always pair Outi & Asmo: {cfg_pair}</li>"
+                    f"</ul></div>"
+                )
+                stats_html = stats_html.replace(
+                    "<div class='container'>",
+                    "<div class='container'>" + cfg_html,
+                    1
+                )
                 st.session_state["all_stats"].append(stats_html)
         st.success("Schedule(s) generated successfully!")
 
