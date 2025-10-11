@@ -538,6 +538,21 @@ def main():
                         p["skill"] = st.number_input(p["name"], 1, 10, p["skill"],
                                                      key=f"skill_{p['name']}")
 
+    # ------- live grouped-by-skill summary (auto-updates) -------
+    st.markdown("**📊 Current Regulars Grouped by Skill (live):**", unsafe_allow_html=True)
+    skills_present = sorted({int(p["skill"]) for p in REGULAR_PLAYERS}, reverse=True)
+    for s in skills_present:
+        names_for_skill = []
+        for p in REGULAR_PLAYERS:
+            if int(p["skill"]) == s:
+                sym = "<span style='color:magenta;'>♀</span>" if p["gender"] == "F" \
+                      else "<span style='color:cyan;'>♂</span>"
+                names_for_skill.append(f"{p['name']} {sym}")
+        if names_for_skill:
+            # sort names alphabetically within each skill for readability
+            names_for_skill = sorted(names_for_skill, key=lambda x: x.lower())
+            st.markdown(f"Skill {s}: " + ", ".join(names_for_skill), unsafe_allow_html=True)
+
     # ------------ player selection ------------------------
     per_col = math.ceil(len(REGULAR_PLAYERS) / 4)
     cols_p  = st.columns(4)
