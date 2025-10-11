@@ -598,7 +598,12 @@ def main():
     # Totals by gender for selected players
     male_count   = sum(1 for g in genders if g == "M")
     female_count = sum(1 for g in genders if g == "F")
-    st.markdown(f"**Totals:** {male_count} Men ♂, {female_count} Women ♀")
+    male_sym     = "<span style='color:cyan;font-weight:bold;'>♂</span>"
+    female_sym   = "<span style='color:magenta;font-weight:bold;'>♀</span>"
+    st.markdown(
+        f"**Totals:** {male_count} Men {male_sym}, {female_count} Women {female_sym}",
+        unsafe_allow_html=True
+    )
 
     # ------------ court selection ------------------------
     st.header("🎾 Select Regular Courts")
