@@ -600,8 +600,10 @@ def main():
     female_count = sum(1 for g in genders if g == "F")
     male_sym     = "<span style='color:cyan;font-weight:bold;'>♂</span>"
     female_sym   = "<span style='color:magenta;font-weight:bold;'>♀</span>"
+    male_word    = "<span style='color:cyan;font-weight:bold;'>Men</span>"
+    female_word  = "<span style='color:magenta;font-weight:bold;'>Women</span>"
     st.markdown(
-        f"**Totals:** {male_count} Men {male_sym}, {female_count} Women {female_sym}",
+        f"**Totals:** {male_count} {male_word} {male_sym}, {female_count} {female_word} {female_sym}",
         unsafe_allow_html=True
     )
 
