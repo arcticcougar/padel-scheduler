@@ -6,7 +6,7 @@ import streamlit as st
 import itertools
 import numpy as np
 import random
-from datetime import date
+from datetime import date, time, timedelta, datetime
 import math
 from math import comb, factorial
 
@@ -207,14 +207,16 @@ def compute_same_sex_match_indices(total_matches: int, count: int):
 # --------------------------------------------------------------------------- #
 #  HTML builders                                                              #
 # --------------------------------------------------------------------------- #
-def format_match_table_html(match_no, groups, court_names, player_names, bench, block_tag=None, downstairs_idx=None):
+def format_match_table_html(match_no, groups, court_names, player_names, bench,
+                           block_tag=None, downstairs_idx=None, time_label=None):
     blk = f" – Block {block_tag}" if block_tag else ""
+    time_str = f" - {time_label}" if time_label else ""
     html = f"""
     <div style="margin-bottom:10px;box-shadow:0 2px 4px rgba(0,0,0,.1);
                 border-radius:8px;overflow:hidden;background:#fff;">
       <div style="padding:10px;">
         <h2 style="text-align:center;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;
-                   margin:0 0 10px 0;">Match {match_no+1}{blk}</h2>
+                   margin:0 0 10px 0;">Match {match_no+1}{time_str}{blk}</h2>
         <table style="width:100%;border-collapse:collapse;table-layout:fixed;
                       font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;">
           <thead><tr style="background:#f0f0f0;">
@@ -400,7 +402,8 @@ def assign_matches(names, genders, skills, courts, court_sz=4, total_matches=6,
                    samples=100000, reject_mixed=False, enable_skill=False,
                    skill_wt=20, force_outi_asmo=False,
                    same_sex_matches_count=0,
-                   use_downstairs_rotation=False):
+                   use_downstairs_rotation=False,
+                   start_dt: datetime | None = None):
     n_players   = len(names)
     courts_used = determine_courts_to_use(n_players, len(courts), court_sz)
 
@@ -493,14 +496,22 @@ def assign_matches(names, genders, skills, courts, court_sz=4, total_matches=6,
         # Build schedule HTML with block labels and downstairs badge
         matches_per_page = 3 if len(courts) <= 4 else 2
         html_blocks = []
+        # Build time labels: each match is 15 minutes starting from sess_time
         for idx, (groups, bench) in enumerate(all_matches):
             if idx and idx % matches_per_page == 0:
                 html_blocks.append("<div style='page-break-after: always;'></div>")
             # Compute block label from match index
             bidx = idx // 2
+            # When downstairs rotation is enabled, don't show block tag in downloadable HTML
+            block_for_title = None if use_downstairs_rotation else block_label(bidx)
+            base_dt = start_dt if start_dt else datetime.combine(date.today(), time(hour=10, minute=30))
+            slot_start = base_dt + timedelta(minutes=15*idx)
+            slot_end   = slot_start + timedelta(minutes=15)
+            time_label = f"{slot_start.strftime('%H:%M')}-{slot_end.strftime('%H:%M')}"
             html_blocks.append(format_match_table_html(idx, groups, courts, names, bench,
-                                                       block_tag=block_label(bidx),
-                                                       downstairs_idx=down_idx))
+                                                       block_tag=block_for_title,
+                                                       downstairs_idx=down_idx,
+                                                       time_label=time_label))
         schedule_html = "".join(html_blocks)
         return schedule_html, teammate_mtx, opponent_mtx, rest_track, all_matches, courts_used
 
@@ -575,8 +586,9 @@ def main():
     # ----------------- page header ----------------------
     st.title("Mijas Padellers Match Scheduler")
     sess_date = st.date_input("📅 Session Date", value=date.today())
+    sess_time = st.time_input("⏰ Start Time", value=time(hour=10, minute=30))
     date_str  = sess_date.strftime("%A %d %B %Y")
-    st.write("Selected date:", date_str)
+    st.write("Selected date:", date_str, "at", sess_time.strftime("%H:%M"))
 
     # ----------------- player master list ---------------
     REGULAR_PLAYERS = [
@@ -851,7 +863,8 @@ def main():
                     reject_mixed=reject_mixed, enable_skill=enable_skill,
                     skill_wt=skill_wt, force_outi_asmo=force_pairing,
                     same_sex_matches_count=same_sex_matches_count,
-                    use_downstairs_rotation=use_downstairs_rotation)
+                    use_downstairs_rotation=use_downstairs_rotation,
+                    start_dt=datetime.combine(sess_date, sess_time))
 
                 p_table = build_player_schedule_table(all_matches, players_ng, courts)
                 full_html = f"""
@@ -866,7 +879,7 @@ def main():
                     @media print{{body{{margin:0;padding:0;}}}}
                 </style></head><body><div class='container'>
                 <h1 style='text-align:center;'>Mijas Padellers Match Schedule</h1>
-                <h2 style='text-align:center;'>{date_str}</h2>
+                <h2 style='text-align:center;'>{date_str} at {sess_time.strftime("%H:%M")}</h2>
                 {sched_html}<hr><div style='page-break-before:always;'>{p_table}</div>
                 </div></body></html>"""
 
