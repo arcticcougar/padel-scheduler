@@ -215,7 +215,7 @@ def compute_same_sex_match_indices(total_matches: int, count: int):
 def format_match_table_html(match_no, groups, court_names, player_names, bench,
                            block_tag=None, downstairs_idx=None, time_label=None):
     blk = f" – Block {block_tag}" if block_tag else ""
-    time_str = f" - {time_label}" if time_label else ""
+    time_str = f" [{time_label}]" if time_label else ""
     html = f"""
     <div style="margin-bottom:10px;box-shadow:0 2px 4px rgba(0,0,0,.1);
                 border-radius:8px;overflow:hidden;background:#fff;">
@@ -884,7 +884,7 @@ def main():
                     @media print{{body{{margin:0;padding:0;}}}}
                 </style></head><body><div class='container'>
                 <h1 style='text-align:center;'>Mijas Padellers Match Schedule</h1>
-                <h2 style='text-align:center;'>{date_str} at {sess_time.strftime("%H:%M")}</h2>
+                <h2 style='text-align:center;'>{date_str}</h2>
                 {sched_html}<hr><div style='page-break-before:always;'>{p_table}</div>
                 </div></body></html>"""
 
