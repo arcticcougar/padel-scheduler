@@ -161,7 +161,7 @@ def identify_downstairs_courts(court_names):
     upstairs_idx = [i for i in range(len(court_names)) if i not in downstairs_idx]
     return downstairs_idx, upstairs_idx
 
-def build_downstairs_rotation(players, blocks, d_slots):
+def build_downstairs_rotation(players, blocks, d_slots, offset_first_block=True):
     """Map each 2-match block to a set of player indices assigned downstairs.
     Tries to give everyone exactly one block when possible; uses entry order fairness.
     Allows ±1 size variance when needed.
@@ -174,6 +174,11 @@ def build_downstairs_rotation(players, blocks, d_slots):
     eligible = players[:]  # entry/rest-order
     # Everyone gets one block if capacity permits, else as many as possible from the front
     pick = eligible if n <= max_unique else eligible[:max_unique]
+    # Rest-aware tweak: avoid placing the very first rest-priority players
+    # downstairs in the first block by rotating the pick list by d_slots.
+    if offset_first_block and d_slots > 0 and len(pick) > 1:
+        rot = min(d_slots, len(pick))
+        pick = pick[rot:] + pick[:rot]
     idx = 0
     for p in pick:
         rotation[idx % blocks].add(p)
