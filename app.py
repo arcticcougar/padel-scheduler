@@ -304,7 +304,7 @@ def build_player_schedule_table(all_matches, names, courts):
     table = ["<h2>Player Schedule Summary</h2>",
              "<table style='width:100%;border-collapse:collapse;table-layout:fixed;'><thead><tr style='background:#f0f0f0;text-align:center;'>",
              "<th style='width:20%;padding:6px;border-bottom:2px solid #ddd;'>Player</th>"]
-    table += [f"<th style='width:{col_w}%;padding:6px;border-bottom:2px solid #ddd;'>Match {i+1}</th>"
+    table += [f"<th style='width:{col_w}%;padding:6px;border-bottom:2px solid #ddd;text-align:center;'>Match {i+1}</th>"
               for i in range(n_matches)]
     table += ["</tr></thead><tbody>"]
     for idx in sorted_idx:
@@ -606,9 +606,9 @@ def main():
         {"name": "Bill", "gender": "M", "skill": 7},
         {"name": "Chris", "gender": "M", "skill": 6},
         {"name": "Christine", "gender": "F", "skill": 5},
-        {"name": "Colin", "gender": "M", "skill": 6},
+        {"name": "Colin T.", "gender": "M", "skill": 6},
         {"name": "Collin", "gender": "M", "skill": 6},
-        {"name": "Cris Burgos", "gender": "F", "skill": 5},
+        {"name": "Cris B.", "gender": "F", "skill": 5},
         {"name": "Daryoush", "gender": "M", "skill": 6},
         {"name": "Dave", "gender": "M", "skill": 7},
         {"name": "Declan", "gender": "M", "skill": 7},
