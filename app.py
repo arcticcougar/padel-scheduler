@@ -434,7 +434,9 @@ def assign_matches(names, genders, skills, courts, court_sz=4, total_matches=6,
         blocks = math.ceil(total_matches / 2)
         d_slots = d_courts * court_sz
         rotation = build_downstairs_rotation(players, blocks, d_slots)
-        spaced_same_sex = compute_same_sex_match_indices(total_matches, same_sex_matches_count)
+        # Force N=0 when checkbox is off
+        eff_same_sex_count = same_sex_matches_count if reject_mixed else 0
+        spaced_same_sex = compute_same_sex_match_indices(total_matches, eff_same_sex_count)
 
         all_matches.clear()
         teammate_mtx, opponent_mtx = initialize_matrices(n_players)
@@ -521,7 +523,9 @@ def assign_matches(names, genders, skills, courts, court_sz=4, total_matches=6,
         return schedule_html, teammate_mtx, opponent_mtx, rest_track, all_matches, courts_used
 
     # -------- default flow (no downstairs rotation) --------
-    spaced_same_sex = compute_same_sex_match_indices(total_matches, same_sex_matches_count)
+    # Force N=0 when checkbox is off
+    eff_same_sex_count = same_sex_matches_count if reject_mixed else 0
+    spaced_same_sex = compute_same_sex_match_indices(total_matches, eff_same_sex_count)
 
     for m_no in range(total_matches):
         st.info(f"--- Assigning players for Match {m_no+1} ---")
@@ -898,9 +902,11 @@ def main():
                                                           genders, skills,
                                                           courts)
                 # Inject configuration summary at top of stats page
-                spaced_same_sex = compute_same_sex_match_indices(total_matches, same_sex_matches_count)
-                cfg_same_sex = "Yes" if (reject_mixed or same_sex_matches_count > 0) else "No"
-                cfg_same_sex_matches = ", ".join(str(i+1) for i in spaced_same_sex) if spaced_same_sex else ("All" if reject_mixed else "0")
+                # Use effective count (0 when checkbox off) for summary as well
+                eff_same_sex_count = same_sex_matches_count if reject_mixed else 0
+                spaced_same_sex = compute_same_sex_match_indices(total_matches, eff_same_sex_count)
+                cfg_same_sex = "Yes" if reject_mixed else "No"
+                cfg_same_sex_matches = ", ".join(str(i+1) for i in spaced_same_sex) if spaced_same_sex else ("0")
                 cfg_skill = "Yes" if enable_skill else "No"
                 cfg_pair = "Yes" if force_pairing else "No"
                 cfg_down = "Yes" if (use_downstairs_rotation and any(x in courts for x in ("Court 12","12","Court 13","13"))) else "No"
