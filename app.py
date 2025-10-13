@@ -825,13 +825,11 @@ def main():
     total_matches = st.number_input("🔢 Matches per schedule", 1, value=6)
     num_sched     = st.number_input("🗂 Number of schedules", 1, value=1)
     default_samples = int(min(max_unique, 200_000)) if max_unique else 200_000
-    samples       = st.number_input("🔍 Random combinations to try", 1,
-                                    value=default_samples, step=50_000)
-    st.info(f"Approx. unique combinations: {int(max_unique):,}")
+    
 
-    reject_mixed   = st.checkbox("🏳️‍🌈 Prefer Same-Sex Play", value=True)
+    reject_mixed   = st.checkbox("🏳️‍🌈 Prefer Same-Sex Play", value=False)
     same_sex_matches_count = st.number_input(
-        "Number of initial matches to prefer same-sex play", 0, value=3
+        "Number of same-sex matches", 0, value=3
     )
     enable_skill   = st.checkbox("🎯 Skill-based Matches", value=True)
     force_pairing  = st.checkbox("Always pair Outi & Asmo", value=False)
@@ -841,12 +839,16 @@ def main():
     use_downstairs_rotation = False
     if has_downstairs:
         use_downstairs_rotation = st.checkbox(
-            "Use downstairs rotation for courts 12/13", value=False,
+            "Use downstairs rotation for courts 12/13", value=True,
             help=("Splits the session into 2-match blocks and rotates a fixed subgroup "
                   "downstairs per block; teams reshuffle between the two matches.")
         )
     with st.expander("⚖️ Skill Penalty Weight", expanded=False):
         skill_wt = st.number_input("Penalty weight", 1, value=20)
+
+    with st.expander("🔍 Random combinations to try", expanded=False):
+        samples = st.number_input("Count", 1, value=default_samples, step=50_000)
+        st.caption(f"Approx. unique combinations: {int(max_unique):,}")
 
     # ------------- generate button -----------------------
     if st.button("📅 Generate Schedule(s)"):
