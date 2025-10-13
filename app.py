@@ -236,7 +236,7 @@ def format_match_table_html(match_no, groups, court_names, player_names, bench,
         t2 = " & ".join(player_names[p] for p in g[2:])
         row_bg = "#ffffff" if cid % 2 == 0 else "#f9f9f9"
         is_down = (downstairs_idx is not None and cid in downstairs_idx)
-        badge = " <span style='background:#222;color:#fff;border-radius:6px;padding:2px 6px;font-size:.8em;'>Downstairs</span>" if is_down else ""
+        badge = " <span class='downstairs-badge' style='background:#222;color:#fff;border-radius:6px;padding:2px 6px;font-size:.8em;-webkit-print-color-adjust:exact;print-color-adjust:exact;'>Downstairs</span>" if is_down else ""
         html += f"""
             <tr style="background:{row_bg};">
               <td style="width:20%;padding:6px;border-bottom:1px solid #ddd;">{court_names[cid]}{badge}</td>
@@ -610,8 +610,8 @@ def main():
         {"name": "Bill", "gender": "M", "skill": 7},
         {"name": "Chris", "gender": "M", "skill": 6},
         {"name": "Christine", "gender": "F", "skill": 5},
-        {"name": "Colin T.", "gender": "M", "skill": 6},
-        {"name": "Collin", "gender": "M", "skill": 6},
+        {"name": "Collin T.", "gender": "M", "skill": 6},
+        {"name": "Colin B.", "gender": "M", "skill": 6},
         {"name": "Cris B.", "gender": "F", "skill": 5},
         {"name": "Daryoush", "gender": "M", "skill": 6},
         {"name": "Dave", "gender": "M", "skill": 7},
@@ -877,7 +877,6 @@ def main():
                     use_downstairs_rotation=use_downstairs_rotation,
                     start_dt=datetime.combine(sess_date, sess_time))
 
-                p_table = build_player_schedule_table(all_matches, players_ng, courts)
                 full_html = f"""
                 <!DOCTYPE html><html lang="en"><head><meta charset="UTF-8">
                 <title>Mijas Padellers Match Schedule - {date_str} (v{s_no+1})</title>
@@ -887,11 +886,12 @@ def main():
                     th,td{{padding:6px;border:1px solid #ddd;text-align:left;}}
                     th{{background:#f2f2f2;font-size:1.1em;}}
                     tr:nth-child(even){{background:#f9f9f9;}}
-                    @media print{{body{{margin:0;padding:0;}}}}
+                    .downstairs-badge{{background:#222;color:#fff;border-radius:6px;padding:2px 6px;font-size:.8em;-webkit-print-color-adjust:exact;print-color-adjust:exact;}}
+                    @media print{{body{{margin:0;padding:0;}} .downstairs-badge{{-webkit-print-color-adjust:exact;print-color-adjust:exact;background:#000;color:#fff;}}}}
                 </style></head><body><div class='container'>
                 <h1 style='text-align:center;'>Mijas Padellers Match Schedule</h1>
                 <h2 style='text-align:center;'>{date_str}</h2>
-                {sched_html}<hr><div style='page-break-before:always;'>{p_table}</div>
+                {sched_html}
                 </div></body></html>"""
 
                 st.session_state["all_schedules"].append(full_html)
