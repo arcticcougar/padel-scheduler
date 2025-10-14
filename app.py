@@ -99,7 +99,7 @@ def evaluate_match(groups, teammate_mtx, opponent_mtx, reject_mixed, genders,
 def find_best_match(players, n_courts, court_sz, teammate_mtx, opponent_mtx,
                     match_no, samples=100000, reject_mixed=False,
                     genders=None, enable_skill=False, skills=None, skill_wt=20,
-                    history=None, forced_pair=None):
+                    history=None, forced_pair=None, match_offset: int = 0):
     best, best_score = None, float('inf')
     bar = st.progress(0); status = st.empty()
     for i in range(samples):
@@ -114,8 +114,8 @@ def find_best_match(players, n_courts, court_sz, teammate_mtx, opponent_mtx,
             best, best_score = groups, s
         if (i+1) % 1000 == 0:
             bar.progress(int((i+1)/samples*100))
-            status.write(f"Match {match_no+1}: sample {(i+1):,}/{samples:,}")
-    bar.progress(100); status.write(f"Match {match_no+1} best match found!")
+            status.write(f"Match {match_no+1+match_offset}: sample {(i+1):,}/{samples:,}")
+    bar.progress(100); status.write(f"Match {match_no+1+match_offset} best match found!")
     return best
 
 
@@ -452,7 +452,7 @@ def assign_matches(names, genders, skills, courts, court_sz=4, total_matches=6,
             down_group = sorted([p for p in rotation[b] if p in players])
 
             for _ in range(matches_in_block):
-                st.info(f"--- Assigning players for Match {match_counter+1} (Block {block_label(b)}) ---")
+                st.info(f"--- Assigning players for Match {match_counter+1+match_offset} (Block {block_label(b)}) ---")
 
                 # Upstairs capacity and candidates (downstairs group never benches within block)
                 capacity_up = u_courts * court_sz
@@ -471,7 +471,8 @@ def assign_matches(names, genders, skills, courts, court_sz=4, total_matches=6,
                         down_group, d_courts, court_sz,
                         teammate_mtx, opponent_mtx,
                         match_counter, samples,
-                        effective_reject_mixed, genders, enable_skill, skills, skill_wt, history, forced_pair
+                        effective_reject_mixed, genders, enable_skill, skills, skill_wt, history, forced_pair,
+                        match_offset=match_offset
                     ) or []
 
                 # Build upstairs groups
@@ -481,7 +482,8 @@ def assign_matches(names, genders, skills, courts, court_sz=4, total_matches=6,
                         available_up, u_courts, court_sz,
                         teammate_mtx, opponent_mtx,
                         match_counter, samples,
-                        effective_reject_mixed, genders, enable_skill, skills, skill_wt, history, forced_pair
+                        effective_reject_mixed, genders, enable_skill, skills, skill_wt, history, forced_pair,
+                        match_offset=match_offset
                     ) or []
 
                 # Merge aligned to original court order
@@ -532,7 +534,7 @@ def assign_matches(names, genders, skills, courts, court_sz=4, total_matches=6,
     spaced_same_sex = compute_same_sex_match_indices(total_matches, eff_same_sex_count)
 
     for m_no in range(total_matches):
-        st.info(f"--- Assigning players for Match {m_no+1} ---")
+        st.info(f"--- Assigning players for Match {m_no+1+match_offset} ---")
 
         capacity = courts_used * court_sz
         benched  = select_bench_players(players, rest_track,
