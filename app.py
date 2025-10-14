@@ -213,7 +213,8 @@ def compute_same_sex_match_indices(total_matches: int, count: int):
 #  HTML builders                                                              #
 # --------------------------------------------------------------------------- #
 def format_match_table_html(match_no, groups, court_names, player_names, bench,
-                           block_tag=None, downstairs_idx=None, time_label=None):
+                           block_tag=None, downstairs_idx=None, time_label=None,
+                           match_offset: int = 0):
     blk = f" – Block {block_tag}" if block_tag else ""
     time_str = f" [{time_label}]" if time_label else ""
     html = f"""
@@ -221,7 +222,7 @@ def format_match_table_html(match_no, groups, court_names, player_names, bench,
                 border-radius:8px;overflow:hidden;background:#fff;">
       <div style="padding:10px;">
         <h2 style="text-align:center;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;
-                   margin:0 0 10px 0;">Match {match_no+1}{time_str}{blk}</h2>
+                   margin:0 0 10px 0;">Match {match_no+1+match_offset}{time_str}{blk}</h2>
         <table style="width:100%;border-collapse:collapse;table-layout:fixed;
                       font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;">
           <thead><tr style="background:#f0f0f0;">
@@ -253,12 +254,12 @@ def format_match_table_html(match_no, groups, court_names, player_names, bench,
     return html
 
 # -------------------- statistics / debug helpers --------------------------- #
-def format_debug_schedule_html(all_matches, genders, skills, names, courts):
+def format_debug_schedule_html(all_matches, genders, skills, names, courts, match_offset: int = 0):
     dbg = "<h2>Debug Schedule with Skill Info</h2>\n"
     for idx, (groups, bench) in enumerate(all_matches):
         dbg += f"""
         <div style='margin-bottom:10px;border:1px solid #ccc;border-radius:8px;background:#fff;padding:10px;'>
-          <h3 style='text-align:center;margin-top:0;'>Match {idx+1}</h3>
+          <h3 style='text-align:center;margin-top:0;'>Match {idx+1+match_offset}</h3>
           <table style='width:100%;border-collapse:collapse;table-layout:fixed;'>
             <thead><tr style='background:#f0f0f0;'>
               <th style='width:15%;padding:6px;border-bottom:2px solid #ddd;'>Court</th>
@@ -297,14 +298,14 @@ def format_debug_schedule_html(all_matches, genders, skills, names, courts):
     return dbg
 
 
-def build_player_schedule_table(all_matches, names, courts):
+def build_player_schedule_table(all_matches, names, courts, match_offset: int = 0):
     n_matches = len(all_matches)
     sorted_idx = sorted(range(len(names)), key=lambda i: names[i].lower().strip())
     col_w = 80 / n_matches if n_matches else 80
     table = ["<h2>Player Schedule Summary</h2>",
              "<table style='width:100%;border-collapse:collapse;table-layout:fixed;'><thead><tr style='background:#f0f0f0;text-align:center;'>",
              "<th style='width:20%;padding:6px;border-bottom:2px solid #ddd;'>Player</th>"]
-    table += [f"<th style='width:{col_w}%;padding:6px;border-bottom:2px solid #ddd;text-align:center;'>Match {i+1}</th>"
+    table += [f"<th style='width:{col_w}%;padding:6px;border-bottom:2px solid #ddd;text-align:center;'>Match {i+1+match_offset}</th>"
               for i in range(n_matches)]
     table += ["</tr></thead><tbody>"]
     for idx in sorted_idx:
@@ -322,7 +323,7 @@ def build_player_schedule_table(all_matches, names, courts):
     return "".join(table)
 
 
-def format_statistics_html(stats, date_str_uk, all_matches, genders):
+def format_statistics_html(stats, date_str_uk, all_matches, genders, match_offset: int = 0):
     explanation = (
         "<h3>Session Overview</h3>"
         "<p>This page shows how many times each player rested, and how often they teamed up or faced each other.</p>"
@@ -353,7 +354,8 @@ def format_statistics_html(stats, date_str_uk, all_matches, genders):
 #  Statistics generator (bug-fixed)                                           #
 # --------------------------------------------------------------------------- #
 def generate_Schedule_Statistics(team_mtx, opp_mtx, rest_track, names,
-                                 all_matches, genders, skills, courts):
+                                 all_matches, genders, skills, courts,
+                                 match_offset: int = 0):
     lines = []; team_total = opp_total = 0
     tfreq, ofreq = {}, {}
     n = len(names)
@@ -393,9 +395,9 @@ def generate_Schedule_Statistics(team_mtx, opp_mtx, rest_track, names,
                    f"Mixed Games: {mixed}\n")
 
     base = format_statistics_html(stats_text, st.session_state["date_str_uk"],
-                                  all_matches, genders)
-    debug = format_debug_schedule_html(all_matches, genders, skills, names, courts)
-    p_table = build_player_schedule_table(all_matches, names, courts)
+                                  all_matches, genders, match_offset=match_offset)
+    debug = format_debug_schedule_html(all_matches, genders, skills, names, courts, match_offset=match_offset)
+    p_table = build_player_schedule_table(all_matches, names, courts, match_offset=match_offset)
     return base.replace("</body>",
                         f"{debug}<div style='page-break-before: always;'>{p_table}</div></body>")
 
@@ -408,7 +410,8 @@ def assign_matches(names, genders, skills, courts, court_sz=4, total_matches=6,
                    skill_wt=20, force_outi_asmo=False,
                    same_sex_matches_count=0,
                    use_downstairs_rotation=False,
-                   start_dt: datetime | None = None):
+                   start_dt: datetime | None = None,
+                   match_offset: int = 0):
     n_players   = len(names)
     courts_used = determine_courts_to_use(n_players, len(courts), court_sz)
 
@@ -518,7 +521,8 @@ def assign_matches(names, genders, skills, courts, court_sz=4, total_matches=6,
             html_blocks.append(format_match_table_html(idx, groups, courts, names, bench,
                                                        block_tag=block_for_title,
                                                        downstairs_idx=down_idx,
-                                                       time_label=time_label))
+                                                       time_label=time_label,
+                                                       match_offset=match_offset))
         schedule_html = "".join(html_blocks)
         return schedule_html, teammate_mtx, opponent_mtx, rest_track, all_matches, courts_used
 
@@ -578,7 +582,8 @@ def assign_matches(names, genders, skills, courts, court_sz=4, total_matches=6,
         time_label = f"{slot_start.strftime('%H:%M')}-{slot_end.strftime('%H:%M')}"
         html_blocks.append(format_match_table_html(idx, groups, courts,
                                                    names, bench,
-                                                   time_label=time_label))
+                                                   time_label=time_label,
+                                                   match_offset=match_offset))
     schedule_html = "".join(html_blocks)
     # ----------------------------------------------------------------------
 
@@ -842,6 +847,7 @@ def main():
     same_sex_matches_count = st.number_input(
         "Number of same-sex matches", 0, value=3
     )
+    start_match_number = st.number_input("Start match number", min_value=1, value=1)
     enable_skill   = st.checkbox("🎯 Skill-based Matches", value=True)
     force_pairing  = st.checkbox("Always pair Outi & Asmo", value=False)
     # Show downstairs rotation only if courts 12/13 are selected
@@ -882,7 +888,8 @@ def main():
                     skill_wt=skill_wt, force_outi_asmo=force_pairing,
                     same_sex_matches_count=same_sex_matches_count,
                     use_downstairs_rotation=use_downstairs_rotation,
-                    start_dt=datetime.combine(sess_date, sess_time))
+                    start_dt=datetime.combine(sess_date, sess_time),
+                    match_offset=max(0, int(start_match_number) - 1))
 
                 full_html = f"""
                 <!DOCTYPE html><html lang="en"><head><meta charset="UTF-8">
@@ -907,13 +914,15 @@ def main():
                                                           players_wg,
                                                           all_matches,
                                                           genders, skills,
-                                                          courts)
+                                                          courts,
+                                                          match_offset=max(0, int(start_match_number) - 1))
                 # Inject configuration summary at top of stats page
                 # Use effective count (0 when checkbox off) for summary as well
                 eff_same_sex_count = same_sex_matches_count if reject_mixed else 0
                 spaced_same_sex = compute_same_sex_match_indices(total_matches, eff_same_sex_count)
                 cfg_same_sex = "Yes" if reject_mixed else "No"
-                cfg_same_sex_matches = ", ".join(str(i+1) for i in spaced_same_sex) if spaced_same_sex else ("0")
+                # Apply offset to same-sex match indices for display
+                cfg_same_sex_matches = ", ".join(str(i+1 + max(0, int(start_match_number) - 1)) for i in spaced_same_sex) if spaced_same_sex else ("0")
                 cfg_skill = "Yes" if enable_skill else "No"
                 cfg_pair = "Yes" if force_pairing else "No"
                 cfg_down = "Yes" if (use_downstairs_rotation and any(x in courts for x in ("Court 12","12","Court 13","13"))) else "No"
