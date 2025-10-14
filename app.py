@@ -568,11 +568,17 @@ def assign_matches(names, genders, skills, courts, court_sz=4, total_matches=6,
     # ------------ build schedule HTML with page breaks ---------------------
     matches_per_page = 3 if courts_used <= 4 else 2
     html_blocks = []
+    # Build time labels: each match is 15 minutes starting from sess_time
+    base_dt = start_dt if start_dt else datetime.combine(date.today(), time(hour=10, minute=30))
     for idx, (groups, bench) in enumerate(all_matches):
         if idx and idx % matches_per_page == 0:
             html_blocks.append("<div style='page-break-after: always;'></div>")
+        slot_start = base_dt + timedelta(minutes=15*idx)
+        slot_end   = slot_start + timedelta(minutes=15)
+        time_label = f"{slot_start.strftime('%H:%M')}-{slot_end.strftime('%H:%M')}"
         html_blocks.append(format_match_table_html(idx, groups, courts,
-                                                   names, bench))
+                                                   names, bench,
+                                                   time_label=time_label))
     schedule_html = "".join(html_blocks)
     # ----------------------------------------------------------------------
 
