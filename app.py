@@ -609,6 +609,8 @@ def main():
     st.title("Mijas Padellers Match Scheduler")
     sess_date = st.date_input("📅 Session Date", value=date.today())
     sess_time = st.time_input("⏰ Start Time", value=time(hour=10, minute=30))
+    # Start match number placed directly below time input for clarity
+    start_match_number = st.number_input("Start match number", min_value=1, value=1)
     date_str  = sess_date.strftime("%A %d %B %Y")
     st.write("Selected date:", date_str, "at", sess_time.strftime("%H:%M"))
 
@@ -849,7 +851,6 @@ def main():
     same_sex_matches_count = st.number_input(
         "Number of same-sex matches", 0, value=3
     )
-    start_match_number = st.number_input("Start match number", min_value=1, value=1)
     enable_skill   = st.checkbox("🎯 Skill-based Matches", value=True)
     force_pairing  = st.checkbox("Always pair Outi & Asmo", value=False)
     # Show downstairs rotation only if courts 12/13 are selected
