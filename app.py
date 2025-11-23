@@ -629,6 +629,7 @@ def main():
         {"name": "Cris B.", "gender": "F", "skill": 5},
         {"name": "Daryoush", "gender": "M", "skill": 6},
         {"name": "Dave", "gender": "M", "skill": 7},
+        {"name": "Debbie", "gender": "F", "skill": 5},
         {"name": "Declan", "gender": "M", "skill": 7},
         {"name": "Dee", "gender": "F", "skill": 4},
         {"name": "Eugene", "gender": "M", "skill": 6},
@@ -652,10 +653,12 @@ def main():
         # {"name": "Lilli", "gender": "F", "skill": 5},   # removed per request
         {"name": "Linda", "gender": "F", "skill": 6},
         {"name": "Lindsey", "gender": "F", "skill": 5},
+        {"name": "Louise", "gender": "F", "skill": 5},
         {"name": "Lynn", "gender": "F", "skill": 4},
         {"name": "Lynsey", "gender": "F", "skill": 4},
         {"name": "Maria", "gender": "F", "skill": 4},
         {"name": "Maxine", "gender": "F", "skill": 5},
+        {"name": "Melvyn", "gender": "M", "skill": 6},
         {"name": "Mike", "gender": "M", "skill": 7},
         {"name": "Norman", "gender": "M", "skill": 6},
         {"name": "Outi", "gender": "F", "skill": 5},
@@ -666,6 +669,8 @@ def main():
         {"name": "Ronan", "gender": "M", "skill": 7},
         {"name": "Ruth", "gender": "F", "skill": 5},
         {"name": "Sandy", "gender": "F", "skill": 5},
+        {"name": "Sarah M", "gender": "F", "skill": 5},
+        {"name": "Sarah R", "gender": "F", "skill": 5},
         {"name": "Scott", "gender": "M", "skill": 7},
         {"name": "Sharon", "gender": "F", "skill": 4},
         {"name": "Soraya", "gender": "F", "skill": 6},
@@ -676,11 +681,6 @@ def main():
         {"name": "Vic", "gender": "M", "skill": 6},
         {"name": "Walker", "gender": "M", "skill": 7},
         {"name": "Wendy", "gender": "F", "skill": 4},
-        {"name": "Debbie", "gender": "F", "skill": 5},
-        {"name": "Louise", "gender": "F", "skill": 5},
-        {"name": "Melvyn", "gender": "M", "skill": 6},
-        {"name": "Sarah M", "gender": "F", "skill": 5},
-        {"name": "Sarah R", "gender": "F", "skill": 5},
     ]
     REGULAR_PLAYERS = sorted(REGULAR_PLAYERS, key=lambda x: x["name"])
 
