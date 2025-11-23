@@ -616,7 +616,6 @@ def main():
 
     # ----------------- player master list ---------------
     REGULAR_PLAYERS = [
-        {"name": "Agneta", "gender": "F", "skill": 5},
         {"name": "Aideen", "gender": "F", "skill": 5},
         {"name": "Anna", "gender": "F", "skill": 5},
         {"name": "Anny", "gender": "F", "skill": 6},
@@ -650,7 +649,7 @@ def main():
         {"name": "Kim", "gender": "F", "skill": 4},
         {"name": "Leah", "gender": "F", "skill": 4},
         {"name": "Leigh", "gender": "F", "skill": 4},
-        {"name": "Lilli", "gender": "F", "skill": 5},   
+        # {"name": "Lilli", "gender": "F", "skill": 5},   # removed per request
         {"name": "Linda", "gender": "F", "skill": 6},
         {"name": "Lindsey", "gender": "F", "skill": 5},
         {"name": "Lynn", "gender": "F", "skill": 4},
@@ -677,6 +676,11 @@ def main():
         {"name": "Vic", "gender": "M", "skill": 6},
         {"name": "Walker", "gender": "M", "skill": 7},
         {"name": "Wendy", "gender": "F", "skill": 4},
+        {"name": "Debbie", "gender": "F", "skill": 5},
+        {"name": "Louise", "gender": "F", "skill": 5},
+        {"name": "Melvyn", "gender": "M", "skill": 6},
+        {"name": "Sarah M", "gender": "F", "skill": 5},
+        {"name": "Sarah R", "gender": "F", "skill": 5},
     ]
     REGULAR_PLAYERS = sorted(REGULAR_PLAYERS, key=lambda x: x["name"])
 
