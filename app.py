@@ -10,6 +10,7 @@ from datetime import date, time, timedelta, datetime
 import json
 import urllib.request
 import urllib.error
+import html as _html
 import math
 from math import comb, factorial
 
@@ -191,6 +192,33 @@ def upload_stats_html_to_drive(stats_html: str, filename: str, meta: dict | None
     except Exception:
         # Silent failure to preserve existing UX.
         return
+
+
+def extract_pairings_lines_from_stats_html(stats_html: str) -> list[str]:
+    """Extract just the per-player pairing lines from the stats <pre> block."""
+    try:
+        pre_i = stats_html.find("<pre")
+        if pre_i == -1:
+            return []
+        gt_i = stats_html.find(">", pre_i)
+        if gt_i == -1:
+            return []
+        end_i = stats_html.find("</pre>", gt_i)
+        if end_i == -1:
+            return []
+        raw = stats_html[gt_i + 1:end_i]
+        text = _html.unescape(raw)
+        lines = [ln for ln in text.splitlines() if ln.strip()]
+        out = []
+        for ln in lines:
+            if ln.startswith("Teammate Total:") or ln.startswith("Opponent Total:") or \
+               ln.startswith("Teammate Count Frequencies:") or ln.startswith("Opponent Count Frequencies:") or \
+               ln.startswith("All-Male Games:") or ln.startswith("All-Female Games:") or ln.startswith("Mixed Games:"):
+                break
+            out.append(ln)
+        return out
+    except Exception:
+        return []
 
 # -------------------- downstairs rotation helpers --------------------------- #
 def identify_downstairs_courts(court_names):
@@ -1008,6 +1036,23 @@ def main():
                     st.session_state["all_stats"][i],
                     fn_stat,
                     meta={"date": date_str, "schedule_number": i + 1},
+                )
+                # Also upload a small JSON containing just the pairing lines section
+                pairings_lines = extract_pairings_lines_from_stats_html(st.session_state["all_stats"][i])
+                json_payload = json.dumps(
+                    {
+                        "date": date_str,
+                        "schedule_number": i + 1,
+                        "pairings_lines": pairings_lines,
+                    },
+                    ensure_ascii=False,
+                    indent=2,
+                )
+                fn_json = f"Schedule_Statistics_{i+1}_{date_str.replace(' ','_')}_pairings.json"
+                upload_stats_html_to_drive(
+                    json_payload,
+                    fn_json,
+                    meta={"date": date_str, "schedule_number": i + 1, "type": "pairings_json"},
                 )
         st.divider()
 
