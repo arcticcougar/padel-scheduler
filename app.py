@@ -7,6 +7,9 @@ import itertools
 import numpy as np
 import random
 from datetime import date, time, timedelta, datetime
+import json
+import urllib.request
+import urllib.error
 import math
 from math import comb, factorial
 
@@ -151,6 +154,43 @@ def deduplicate_names(names):
                 seen[new] = 1; new = f"{n} ({seen[new]})"
             seen[new] = 1; out.append(new)
     return out
+
+# --------------------------------------------------------------------------- #
+#  Optional upload: send Statistics HTML to Google Drive via webhook           #
+# --------------------------------------------------------------------------- #
+def upload_stats_html_to_drive(stats_html: str, filename: str, meta: dict | None = None) -> None:
+    """Best-effort upload of stats HTML to a configured webhook.
+
+    Requires Streamlit secrets:
+      - STATS_WEBHOOK_URL
+      - STATS_WEBHOOK_TOKEN
+    """
+    try:
+        url = st.secrets.get("STATS_WEBHOOK_URL")
+        token = st.secrets.get("STATS_WEBHOOK_TOKEN")
+    except Exception:
+        return
+
+    if not url or not token:
+        return
+
+    payload = {"token": token, "filename": filename, "html": stats_html}
+    if meta:
+        payload["meta"] = meta
+
+    try:
+        data = json.dumps(payload).encode("utf-8")
+        req = urllib.request.Request(
+            url,
+            data=data,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            resp.read()
+    except Exception:
+        # Silent failure to preserve existing UX.
+        return
 
 # -------------------- downstairs rotation helpers --------------------------- #
 def identify_downstairs_courts(court_names):
@@ -956,11 +996,19 @@ def main():
         st.subheader("📥 Download")
         for i, sched in enumerate(st.session_state["all_schedules"]):
             fn = f"Schedule_{i+1}_{date_str.replace(' ','_')}.html"
-            st.download_button(f"📄 Schedule {i+1}", sched, fn, "text/html")
+            clicked_schedule = st.download_button(f"📄 Schedule {i+1}", sched, fn, "text/html")
             fn_stat = f"Schedule_Statistics_{i+1}_{date_str.replace(' ','_')}.html"
             st.download_button(f"📄 Statistics {i+1}",
                                st.session_state["all_stats"][i],
                                fn_stat, "text/html")
+            # When the schedule is downloaded, also (best-effort) upload the statistics
+            # HTML to the developer's Google Drive via configured webhook.
+            if clicked_schedule:
+                upload_stats_html_to_drive(
+                    st.session_state["all_stats"][i],
+                    fn_stat,
+                    meta={"date": date_str, "schedule_number": i + 1},
+                )
         st.divider()
 
     # ------------- footer note ----------------------------
