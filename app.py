@@ -712,11 +712,6 @@ def main():
     sess_time = st.time_input("⏰ Start Time", value=time(hour=10, minute=30))
     # Start match number placed directly below time input for clarity
     start_match_number = st.number_input("Start match number", min_value=1, value=1)
-    show_john_virgo_trickshot = st.checkbox(
-        "John Virgo trickshot challenge",
-        value=True,
-        help="Show the John Virgo memorial trickshot challenge message under the date in the downloaded schedule.",
-    )
     date_str  = sess_date.strftime("%A %d %B %Y")
     st.write("Selected date:", date_str, "at", sess_time.strftime("%H:%M"))
 
@@ -962,7 +957,13 @@ def main():
         "Number of same-sex matches", 0, value=3
     )
     enable_skill   = st.checkbox("🎯 Skill-based Matches", value=True)
-    force_pairing  = st.checkbox("Always pair Outi & Asmo", value=False)
+    show_john_virgo_trickshot = st.checkbox(
+        "John Virgo trickshot challenge",
+        value=True,
+        help="Show the John Virgo memorial trickshot challenge message under the date in the downloaded schedule.",
+    )
+    # Keep the pairing logic in code, but remove the GUI toggle (default off).
+    force_pairing = False
     # Show downstairs rotation only if courts 12/13 are selected
     has_downstairs = any(c.endswith("12") or c == "Court 12" or c == "12" for c in courts) or \
                      any(c.endswith("13") or c == "Court 13" or c == "13" for c in courts)
@@ -973,11 +974,9 @@ def main():
             help=("Splits the session into 2-match blocks and rotates a fixed subgroup "
                   "downstairs per block; teams reshuffle between the two matches.")
         )
-    with st.expander("⚖️ Skill Penalty Weight", expanded=False):
-        skill_wt = st.number_input("Penalty weight", 1, value=20)
-
-    with st.expander("🔍 Random combinations to try", expanded=False):
-        samples = st.number_input("Count", 1, value=default_samples, step=50_000)
+    with st.expander("🧰 Miscellaneous", expanded=False):
+        skill_wt = st.number_input("⚖️ Skill penalty weight", 1, value=20)
+        samples = st.number_input("🔍 Random combinations to try (count)", 1, value=default_samples, step=50_000)
         st.caption(f"Approx. unique combinations: {int(max_unique):,}")
 
     # ------------- generate button -----------------------
