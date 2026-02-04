@@ -11,6 +11,7 @@ import json
 import urllib.request
 import urllib.error
 import html as _html
+import time as _time_mod
 import math
 from math import comb, factorial
 
@@ -179,19 +180,30 @@ def upload_stats_html_to_drive(stats_html: str, filename: str, meta: dict | None
     if meta:
         payload["meta"] = meta
 
-    try:
-        data = json.dumps(payload).encode("utf-8")
-        req = urllib.request.Request(
-            url,
-            data=data,
-            headers={"Content-Type": "application/json"},
-            method="POST",
-        )
-        with urllib.request.urlopen(req, timeout=15) as resp:
-            resp.read()
-    except Exception:
-        # Silent failure to preserve existing UX.
-        return
+    data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+
+    # Best-effort retry for transient network / Apps Script delays.
+    for attempt in range(2):
+        try:
+            req = urllib.request.Request(
+                url,
+                data=data,
+                headers={
+                    "Content-Type": "application/json; charset=utf-8",
+                    # Send token in both body and header (backwards compatible).
+                    "Authorization": f"Bearer {token}",
+                },
+                method="POST",
+            )
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                resp.read()
+            return
+        except Exception:
+            if attempt == 0:
+                _time_mod.sleep(0.6)
+                continue
+            # Silent failure to preserve existing UX.
+            return
 
 
 def extract_pairings_lines_from_stats_html(stats_html: str) -> list[str]:

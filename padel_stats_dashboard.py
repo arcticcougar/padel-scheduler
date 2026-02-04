@@ -200,6 +200,32 @@ def choose_actual_files(files: List[SessionFile]) -> List[SessionFile]:
     return chosen
 
 
+def build_audit_index(files: List[SessionFile]) -> Dict[str, Dict[str, Any]]:
+    """Build an audit map keyed by session date (ISO) listing all candidates and the chosen one."""
+    by_date: Dict[date, List[SessionFile]] = {}
+    for f in files:
+        by_date.setdefault(f.session_date, []).append(f)
+
+    out: Dict[str, Dict[str, Any]] = {}
+    for d, fs in sorted(by_date.items(), key=lambda x: x[0]):
+        fs_sorted = sorted(fs, key=lambda f: f.generated_at)
+        chosen = max(fs_sorted, key=lambda f: f.generated_at)
+        out[d.isoformat()] = {
+            "date_label": d.strftime("%A %d %B %Y"),
+            "chosen_filename": chosen.path.name,
+            "candidates": [
+                {
+                    "generated_at_utc": f.generated_at.isoformat(timespec="seconds") + "Z",
+                    "filename": f.path.name,
+                    "schedule_number": f.schedule_number,
+                    "is_chosen": f.path.name == chosen.path.name,
+                }
+                for f in fs_sorted
+            ],
+        }
+    return out
+
+
 def aggregate(files: List[SessionFile]) -> Dict[str, Any]:
     """Aggregate rest + pairings across the provided session files."""
     rest_total: Dict[str, int] = {}
@@ -249,7 +275,7 @@ def aggregate_by_year(files: List[SessionFile]) -> Dict[str, Dict[str, Any]]:
 
 # --------------------------------- HTML ----------------------------------- #
 
-def _html_page(data_by_year: Dict[str, Dict[str, Any]], chosen_sessions: List[SessionFile]) -> str:
+def _html_page(data_by_year: Dict[str, Dict[str, Any]], chosen_sessions: List[SessionFile], audit_index: Dict[str, Dict[str, Any]]) -> str:
     sessions = [
         {
             "date": sf.session_date.isoformat(),
@@ -265,6 +291,7 @@ def _html_page(data_by_year: Dict[str, Dict[str, Any]], chosen_sessions: List[Se
     payload = {
         "sessions": sessions,
         "byYear": data_by_year,
+        "audit": audit_index,
     }
 
     return f"""<!DOCTYPE html>
@@ -336,11 +363,17 @@ def _html_page(data_by_year: Dict[str, Dict[str, Any]], chosen_sessions: List[Se
         <h3 style="margin:0 0 8px;">Chosen sessions list</h3>
         <div class="scroll">
           <table id="sessionsTable">
-            <thead><tr><th>Date</th><th>Schedule #</th><th>Generated at</th><th>File</th></tr></thead>
+            <thead><tr><th>Date</th><th>Schedule #</th><th>Generated at (UTC)</th><th>File</th></tr></thead>
             <tbody></tbody>
           </table>
         </div>
       </div>
+    </div>
+
+    <div class="card">
+      <h3 style="margin:0 0 8px;">Audit: all candidate schedules per session window</h3>
+      <p class="small">Shows every schedule file assigned to that session window and which one was assumed “used”.</p>
+      <div id="auditContainer"></div>
     </div>
   </div>
 
@@ -366,6 +399,37 @@ def _html_page(data_by_year: Dict[str, Dict[str, Any]], chosen_sessions: List[Se
         const tr = document.createElement('tr');
         tr.innerHTML = `<td>${{s.date_label}}</td><td style="text-align:center;">${{s.schedule_number}}</td><td>${{s.generated_at}}</td><td>${{s.filename}}</td>`;
         tbody.appendChild(tr);
+      }});
+    }}
+
+    function renderAudit(audit) {{
+      const container = document.getElementById('auditContainer');
+      container.innerHTML = '';
+      const keys = Object.keys(audit).sort();
+      keys.forEach(k => {{
+        const info = audit[k];
+        const details = document.createElement('details');
+        details.className = 'card';
+        const chosen = info.chosen_filename;
+        details.innerHTML = `
+          <summary style="cursor:pointer;"><b>${{info.date_label}}</b> — chosen: <span class="pill">${{chosen}}</span></summary>
+          <div style="margin-top:10px;" class="scroll">
+            <table>
+              <thead><tr><th>Generated (UTC)</th><th>File</th><th style="text-align:center;">#</th><th style="text-align:center;">Used</th></tr></thead>
+              <tbody>
+                ${{info.candidates.map(c => `
+                  <tr>
+                    <td style="white-space:nowrap;">${{c.generated_at_utc}}</td>
+                    <td>${{c.filename}}</td>
+                    <td style="text-align:center;">${{c.schedule_number}}</td>
+                    <td style="text-align:center;">${{c.is_chosen ? '✅' : ''}}</td>
+                  </tr>
+                `).join('')}}
+              </tbody>
+            </table>
+          </div>
+        `;
+        container.appendChild(details);
       }});
     }}
 
@@ -448,6 +512,7 @@ def _html_page(data_by_year: Dict[str, Dict[str, Any]], chosen_sessions: List[Se
 
     const yearSel = setYearOptions();
     setSessionTable(DATA.sessions);
+    renderAudit(DATA.audit);
     refreshYear(yearSel.value);
     yearSel.addEventListener('change', (e) => refreshYear(e.target.value));
   </script>
@@ -499,8 +564,9 @@ def main() -> int:
 
     chosen = choose_actual_files(parsed)
     data_by_year = aggregate_by_year(chosen)
+    audit_index = build_audit_index(parsed)
 
-    out_html = _html_page(data_by_year, chosen)
+    out_html = _html_page(data_by_year, chosen, audit_index)
     out_path = here / OUTPUT_HTML
     out_path.write_text(out_html, encoding="utf-8")
 
