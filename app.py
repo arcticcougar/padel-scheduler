@@ -6,11 +6,12 @@ import streamlit as st
 import itertools
 import numpy as np
 import random
-from datetime import date, time, timedelta, datetime
+from datetime import date, time, timedelta, datetime, timezone
 import json
 import urllib.request
 import urllib.error
 import html as _html
+import re
 import time as _time_mod
 import math
 from math import comb, factorial
@@ -190,7 +191,7 @@ def upload_stats_html_to_drive(stats_html: str, filename: str, meta: dict | None
                 data=data,
                 headers={
                     "Content-Type": "application/json; charset=utf-8",
-                    # Send token in both body and header (backwards compatible).
+                    # Token in header (plus token in body for compatibility)
                     "Authorization": f"Bearer {token}",
                 },
                 method="POST",
@@ -231,6 +232,16 @@ def extract_pairings_lines_from_stats_html(stats_html: str) -> list[str]:
         return out
     except Exception:
         return []
+
+# Filename-safe timestamp (UTC) for Drive uploads
+def _utc_stamp_for_filename(dt: datetime) -> str:
+    dt = dt.astimezone(timezone.utc).replace(microsecond=0)
+    # 20260204_093512Z
+    return dt.strftime("%Y%m%d_%H%M%SZ")
+
+def _sanitize_filename(name: str) -> str:
+    # Remove characters that are awkward in Drive/Windows filenames
+    return re.sub(r"[^A-Za-z0-9._()\\-]+", "_", name).strip("_")
 
 # -------------------- downstairs rotation helpers --------------------------- #
 def identify_downstairs_courts(court_names):
@@ -1035,23 +1046,29 @@ def main():
     if st.session_state["all_schedules"]:
         st.subheader("📥 Download")
         for i, sched in enumerate(st.session_state["all_schedules"]):
-            # Timestamped filenames help identify which schedule was actually used.
-            # Use UTC so it’s unambiguous across timezones.
-            download_dt_utc = datetime.utcnow().replace(microsecond=0)
-            download_stamp = download_dt_utc.strftime("%Y%m%d_%H%M%S")
-            fn = f"Schedule_{i+1}_{date_str.replace(' ','_')}_{download_stamp}.html"
+            fn = f"Schedule_{i+1}_{date_str.replace(' ','_')}.html"
             clicked_schedule = st.download_button(f"📄 Schedule {i+1}", sched, fn, "text/html")
-            fn_stat = f"Schedule_Statistics_{i+1}_{date_str.replace(' ','_')}_{download_stamp}.html"
+            fn_stat = f"Schedule_Statistics_{i+1}_{date_str.replace(' ','_')}.html"
             st.download_button(f"📄 Statistics {i+1}",
                                st.session_state["all_stats"][i],
                                fn_stat, "text/html")
             # When the schedule is downloaded, also (best-effort) upload the statistics
             # HTML to the developer's Google Drive via configured webhook.
             if clicked_schedule:
+                downloaded_at_utc = datetime.now(timezone.utc)
+                stamp = _utc_stamp_for_filename(downloaded_at_utc)
+                # Keep user-facing download filenames unchanged; only Drive uploads get timestamped names.
+                fn_stat_upload = _sanitize_filename(
+                    f"Schedule_Statistics_{i+1}_{date_str.replace(' ','_')}_{stamp}.html"
+                )
                 upload_stats_html_to_drive(
                     st.session_state["all_stats"][i],
-                    fn_stat,
-                    meta={"date": date_str, "schedule_number": i + 1, "generated_at": download_dt_utc.isoformat() + "Z"},
+                    fn_stat_upload,
+                    meta={
+                        "date": date_str,
+                        "schedule_number": i + 1,
+                        "downloaded_at_utc": downloaded_at_utc.replace(microsecond=0).isoformat(),
+                    },
                 )
                 # Also upload a small JSON containing just the pairing lines section
                 pairings_lines = extract_pairings_lines_from_stats_html(st.session_state["all_stats"][i])
@@ -1059,17 +1076,19 @@ def main():
                     {
                         "date": date_str,
                         "schedule_number": i + 1,
-                        "generated_at": download_dt_utc.isoformat() + "Z",
+                        "downloaded_at_utc": downloaded_at_utc.replace(microsecond=0).isoformat(),
                         "pairings_lines": pairings_lines,
                     },
                     ensure_ascii=False,
                     indent=2,
                 )
-                fn_json = f"Schedule_Statistics_{i+1}_{date_str.replace(' ','_')}_{download_stamp}_pairings.json"
+                fn_json = _sanitize_filename(
+                    f"Schedule_Statistics_{i+1}_{date_str.replace(' ','_')}_{stamp}_pairings.json"
+                )
                 upload_stats_html_to_drive(
                     json_payload,
                     fn_json,
-                    meta={"date": date_str, "schedule_number": i + 1, "type": "pairings_json", "generated_at": download_dt_utc.isoformat() + "Z"},
+                    meta={"date": date_str, "schedule_number": i + 1, "type": "pairings_json"},
                 )
         st.divider()
 
