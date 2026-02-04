@@ -50,6 +50,13 @@ def _strip_gender_symbols(s: str) -> str:
 _LEFT_RE = re.compile(r"^(?P<name>.+?)\s*\[(?P<rest>\d+)\]\s*$")
 _RIGHT_RE = re.compile(r"^(?P<name>.+?)\s*\[(?P<with>\d+)\s*,\s*(?P<against>\d+)\]\s*$")
 
+_HTML_TAG_RE = re.compile(r"<[^>]+>")
+
+
+def _strip_html_tags(s: str) -> str:
+    """Remove HTML tags like <span ...> to support exported pairings JSON."""
+    return _HTML_TAG_RE.sub("", s)
+
 
 @dataclasses.dataclass(frozen=True)
 class FileMeta:
@@ -154,13 +161,17 @@ def parse_schedule_json(path: Path, tz: dt.tzinfo) -> ParsedSchedule | None:
         raw = raw.strip()
         if not raw:
             continue
-        if ":" not in raw:
+        # The lines may contain HTML (e.g. style='color:cyan'), so splitting on ':'
+        # is unsafe. The reliable separator is the rest bracket close followed by ':'
+        # e.g. "... [0]: Other [1,2], ..."
+        sep = raw.find("]:")
+        if sep == -1:
             continue
-        left, right = raw.split(":", 1)
-        left = left.strip()
-        right = right.strip()
+        left = raw[: sep + 1].strip()
+        right = raw[sep + 2 :].strip()
 
-        lm = _LEFT_RE.match(_strip_gender_symbols(left))
+        left_clean = _strip_gender_symbols(_strip_html_tags(left))
+        lm = _LEFT_RE.match(left_clean)
         if not lm:
             continue
         p = lm.group("name").strip()
@@ -186,7 +197,8 @@ def parse_schedule_json(path: Path, tz: dt.tzinfo) -> ParsedSchedule | None:
             pass
 
         for tok in tokens:
-            rm = _RIGHT_RE.match(_strip_gender_symbols(tok))
+            tok_clean = _strip_gender_symbols(_strip_html_tags(tok))
+            rm = _RIGHT_RE.match(tok_clean)
             if not rm:
                 continue
             q = rm.group("name").strip()

@@ -25,6 +25,7 @@ import os
 import platform
 import re
 import sys
+import bisect
 from pathlib import Path
 
 try:
@@ -48,6 +49,13 @@ def _strip_gender_symbols(s: str) -> str:
 
 _LEFT_RE = re.compile(r"^(?P<name>.+?)\s*\[(?P<rest>\d+)\]\s*$")
 _RIGHT_RE = re.compile(r"^(?P<name>.+?)\s*\[(?P<with>\d+)\s*,\s*(?P<against>\d+)\]\s*$")
+
+_HTML_TAG_RE = re.compile(r"<[^>]+>")
+
+
+def _strip_html_tags(s: str) -> str:
+    """Remove HTML tags like <span ...> to support exported pairings JSON."""
+    return _HTML_TAG_RE.sub("", s)
 
 
 @dataclasses.dataclass(frozen=True)
@@ -153,13 +161,17 @@ def parse_schedule_json(path: Path, tz: dt.tzinfo) -> ParsedSchedule | None:
         raw = raw.strip()
         if not raw:
             continue
-        if ":" not in raw:
+        # The lines may contain HTML (e.g. style='color:cyan'), so splitting on ':'
+        # is unsafe. The reliable separator is the rest bracket close followed by ':'
+        # e.g. "... [0]: Other [1,2], ..."
+        sep = raw.find("]:")
+        if sep == -1:
             continue
-        left, right = raw.split(":", 1)
-        left = left.strip()
-        right = right.strip()
+        left = raw[: sep + 1].strip()
+        right = raw[sep + 2 :].strip()
 
-        lm = _LEFT_RE.match(_strip_gender_symbols(left))
+        left_clean = _strip_gender_symbols(_strip_html_tags(left))
+        lm = _LEFT_RE.match(left_clean)
         if not lm:
             continue
         p = lm.group("name").strip()
@@ -185,7 +197,8 @@ def parse_schedule_json(path: Path, tz: dt.tzinfo) -> ParsedSchedule | None:
             pass
 
         for tok in tokens:
-            rm = _RIGHT_RE.match(_strip_gender_symbols(tok))
+            tok_clean = _strip_gender_symbols(_strip_html_tags(tok))
+            rm = _RIGHT_RE.match(tok_clean)
             if not rm:
                 continue
             q = rm.group("name").strip()
@@ -210,42 +223,63 @@ def parse_schedule_json(path: Path, tz: dt.tzinfo) -> ParsedSchedule | None:
     return ParsedSchedule(meta=meta, edges=edges, players=players)
 
 
-def is_session_day(d: dt.date) -> bool:
-    return d.weekday() in SESSION_WEEKDAYS
-
-
 def cutoff_dt_for_day(d: dt.date, tz: dt.tzinfo) -> dt.datetime:
     return dt.datetime(d.year, d.month, d.day, SESSION_CUTOFF_HOUR, SESSION_CUTOFF_MINUTE, tzinfo=tz)
 
 
+def _iter_session_days(start: dt.date, end: dt.date):
+    d = start
+    one = dt.timedelta(days=1)
+    while d <= end:
+        if d.weekday() in SESSION_WEEKDAYS:
+            yield d
+        d += one
+
+
 def pick_used_per_session(schedules: list[ParsedSchedule], tz: dt.tzinfo):
-    # group candidates by session date (Tue/Thu), only those before cutoff
-    by_day: dict[dt.date, list[ParsedSchedule]] = {}
+    """Assign each file to the *next* Tue/Thu session cutoff (14:00) after its timestamp.
+
+    This matches the real workflow: files are generated/downloaded before the session,
+    sometimes days earlier. Example: Wednesday file (no later files) becomes the
+    candidate for Thursday's session.
+    """
+    if not schedules:
+        return [], []
+
+    times = [dt.datetime.fromtimestamp(s.meta.ts_epoch, tz=tz) for s in schedules]
+    min_d = min(times).date() - dt.timedelta(days=7)
+    max_d = max(times).date() + dt.timedelta(days=14)
+
+    cutoffs = [cutoff_dt_for_day(d, tz) for d in _iter_session_days(min_d, max_d)]
+    cutoff_epochs = [c.timestamp() for c in cutoffs]
+
+    # session_key = cutoff datetime (unique)
+    by_cutoff: dict[dt.datetime, list[ParsedSchedule]] = {c: [] for c in cutoffs}
     unassigned: list[ParsedSchedule] = []
-    for s in schedules:
-        t = dt.datetime.fromtimestamp(s.meta.ts_epoch, tz=tz)
-        d = t.date()
-        if not is_session_day(d):
+
+    for s, t in zip(schedules, times):
+        idx = bisect.bisect_right(cutoff_epochs, t.timestamp())
+        if idx >= len(cutoffs):
             unassigned.append(s)
             continue
-        if t >= cutoff_dt_for_day(d, tz):
-            # after cutoff -> not considered for that session window
-            unassigned.append(s)
-            continue
-        by_day.setdefault(d, []).append(s)
+        by_cutoff[cutoffs[idx]].append(s)
 
     sessions = []
-    for d in sorted(by_day.keys()):
-        cands = sorted(by_day[d], key=lambda s: s.meta.ts_epoch)
+    for c in cutoffs:
+        cands = by_cutoff.get(c) or []
+        if not cands:
+            continue
+        cands = sorted(cands, key=lambda s: s.meta.ts_epoch)
         used = cands[-1]
         sessions.append(
             {
-                "session_date": d.isoformat(),
-                "cutoff_local": cutoff_dt_for_day(d, tz).isoformat(timespec="minutes"),
+                "session_date": c.date().isoformat(),
+                "cutoff_local": c.isoformat(timespec="minutes"),
                 "used": used.meta.filename,
-                "candidates": [c.meta.filename for c in cands],
+                "candidates": [x.meta.filename for x in cands],
             }
         )
+
     return sessions, unassigned
 
 
