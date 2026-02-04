@@ -1003,9 +1003,9 @@ def main():
                         f"<h2 class='sched-date'>{date_str}</h2>"
                         "<div class='sched-memorial'>"
                         "In loving memory of John Virgo (1946–2026) - Big Break’s trick-shot magician, "
-                        "snooker champion, and a wonderful friend. As a bit of fun for today's session: "
-                        "try one \"tirck shot” you wouldn’t normally attempt - drop, lob, wall-shot, "
-                        "a touch of spin smash."
+                        "snooker champion, and a wonderful friend. As a challenge for today's session: "
+                        "try and perfect one \"tirck shot” you wouldn’t normally attempt - drop shot, "
+                        "lob, wall-shot, a bit of spin or a smash -- have fun."
                         "</div>"
                     ),
                     first_page_footer_html="",
