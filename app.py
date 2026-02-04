@@ -712,6 +712,11 @@ def main():
     sess_time = st.time_input("⏰ Start Time", value=time(hour=10, minute=30))
     # Start match number placed directly below time input for clarity
     start_match_number = st.number_input("Start match number", min_value=1, value=1)
+    show_john_virgo_trickshot = st.checkbox(
+        "John Virgo trickshot challenge",
+        value=True,
+        help="Show the John Virgo memorial trickshot challenge message under the date in the downloaded schedule.",
+    )
     date_str  = sess_date.strftime("%A %d %B %Y")
     st.write("Selected date:", date_str, "at", sess_time.strftime("%H:%M"))
 
@@ -1001,12 +1006,16 @@ def main():
                     header_html=(
                         "<h1 class='sched-title'>Mijas Padellers Match Schedule</h1>"
                         f"<h2 class='sched-date'>{date_str}</h2>"
-                        "<div class='sched-memorial'>"
-                        "In loving memory of John Virgo (1946–2026) - Big Break’s trick-shot magician, "
-                        "snooker champion, and a wonderful friend. As a challenge for today's session: "
-                        "try and perfect one \"tirck shot” you wouldn’t normally attempt - drop shot, "
-                        "lob, wall-shot, a bit of spin or a smash -- have fun."
-                        "</div>"
+                        + (
+                            "<div class='sched-memorial'>"
+                            "In loving memory of John Virgo (1946–2026) - Big Break’s trick-shot magician, "
+                            "snooker champion, and a wonderful friend. As a challenge for today's session: "
+                            "try and perfect one \"tirck shot” you wouldn’t normally attempt - drop shot, "
+                            "lob, wall-shot, a bit of spin or a smash -- have fun."
+                            "</div>"
+                            if show_john_virgo_trickshot
+                            else ""
+                        )
                     ),
                     first_page_footer_html="",
                 )
@@ -1024,7 +1033,7 @@ def main():
                     .page-content{{flex:1 1 auto;}}
                     .sched-title{{text-align:center;margin:0 0 4px 0;font-size:1.7em;}}
                     .sched-date{{text-align:center;margin:0 0 6px 0;font-size:1.15em;font-weight:600;}}
-                    .sched-memorial{{text-align:center;margin:0 0 10px 0;font-size:0.92em;line-height:1.25;color:#222;}}
+                    .sched-memorial{{text-align:center;margin:0 auto 10px auto;font-size:0.92em;line-height:1.25;color:#222;padding:0 28px;box-sizing:border-box;max-width:980px;}}
                     @media print{{.page{{min-height:100vh;}}}}
                     .downstairs-badge{{background:#222;color:#fff;border-radius:6px;padding:2px 6px;font-size:.8em;-webkit-print-color-adjust:exact;print-color-adjust:exact;}}
                     @media print{{body{{margin:0;padding:0;}} .downstairs-badge{{-webkit-print-color-adjust:exact;print-color-adjust:exact;background:#000;color:#fff;}}}}
