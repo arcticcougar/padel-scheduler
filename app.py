@@ -1023,9 +1023,13 @@ def main():
     if st.session_state["all_schedules"]:
         st.subheader("📥 Download")
         for i, sched in enumerate(st.session_state["all_schedules"]):
-            fn = f"Schedule_{i+1}_{date_str.replace(' ','_')}.html"
+            # Timestamped filenames help identify which schedule was actually used.
+            # Use UTC so it’s unambiguous across timezones.
+            download_dt_utc = datetime.utcnow().replace(microsecond=0)
+            download_stamp = download_dt_utc.strftime("%Y%m%d_%H%M%S")
+            fn = f"Schedule_{i+1}_{date_str.replace(' ','_')}_{download_stamp}.html"
             clicked_schedule = st.download_button(f"📄 Schedule {i+1}", sched, fn, "text/html")
-            fn_stat = f"Schedule_Statistics_{i+1}_{date_str.replace(' ','_')}.html"
+            fn_stat = f"Schedule_Statistics_{i+1}_{date_str.replace(' ','_')}_{download_stamp}.html"
             st.download_button(f"📄 Statistics {i+1}",
                                st.session_state["all_stats"][i],
                                fn_stat, "text/html")
@@ -1035,7 +1039,7 @@ def main():
                 upload_stats_html_to_drive(
                     st.session_state["all_stats"][i],
                     fn_stat,
-                    meta={"date": date_str, "schedule_number": i + 1},
+                    meta={"date": date_str, "schedule_number": i + 1, "generated_at": download_dt_utc.isoformat() + "Z"},
                 )
                 # Also upload a small JSON containing just the pairing lines section
                 pairings_lines = extract_pairings_lines_from_stats_html(st.session_state["all_stats"][i])
@@ -1043,16 +1047,17 @@ def main():
                     {
                         "date": date_str,
                         "schedule_number": i + 1,
+                        "generated_at": download_dt_utc.isoformat() + "Z",
                         "pairings_lines": pairings_lines,
                     },
                     ensure_ascii=False,
                     indent=2,
                 )
-                fn_json = f"Schedule_Statistics_{i+1}_{date_str.replace(' ','_')}_pairings.json"
+                fn_json = f"Schedule_Statistics_{i+1}_{date_str.replace(' ','_')}_{download_stamp}_pairings.json"
                 upload_stats_html_to_drive(
                     json_payload,
                     fn_json,
-                    meta={"date": date_str, "schedule_number": i + 1, "type": "pairings_json"},
+                    meta={"date": date_str, "schedule_number": i + 1, "type": "pairings_json", "generated_at": download_dt_utc.isoformat() + "Z"},
                 )
         st.divider()
 
