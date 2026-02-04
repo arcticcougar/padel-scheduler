@@ -970,8 +970,6 @@ def main():
         value=True,
         help="Show the John Virgo memorial trickshot challenge message under the date in the downloaded schedule.",
     )
-    # Keep the pairing logic in code, but remove the GUI toggle (default off).
-    force_pairing = False
     # Show downstairs rotation only if courts 12/13 are selected
     has_downstairs = any(c.endswith("12") or c == "Court 12" or c == "12" for c in courts) or \
                      any(c.endswith("13") or c == "Court 13" or c == "13" for c in courts)
@@ -983,6 +981,7 @@ def main():
                   "downstairs per block; teams reshuffle between the two matches.")
         )
     with st.expander("🧰 Miscellaneous", expanded=False):
+        force_pairing = st.checkbox("Always pair Outi & Asmo", value=False)
         skill_wt = st.number_input("⚖️ Skill penalty weight", 1, value=20)
         samples = st.number_input("🔍 Random combinations to try (count)", 1, value=default_samples, step=50_000)
         st.caption(f"Approx. unique combinations: {int(max_unique):,}")
@@ -1017,7 +1016,7 @@ def main():
                             "<div class='sched-memorial'>"
                             "In loving memory of John Virgo (1946–2026) - Big Break’s trick-shot magician, "
                             "snooker champion, and a wonderful friend. As a challenge for today's session: "
-                            "try and perfect one \"tirck shot” you wouldn’t normally attempt - drop shot, "
+                            "try and perfect one \"trick-shot\" you wouldn’t normally attempt - drop shot, "
                             "lob, wall-shot, a bit of spin or a smash -- have fun."
                             "</div>"
                             if show_john_virgo_trickshot
