@@ -6,7 +6,7 @@ import streamlit as st
 import itertools
 import numpy as np
 import random
-from datetime import date, time, timedelta, datetime
+from datetime import date, time, timedelta, datetime, timezone
 import json
 import urllib.request
 import urllib.error
@@ -1032,10 +1032,15 @@ def main():
             # When the schedule is downloaded, also (best-effort) upload the statistics
             # HTML to the developer's Google Drive via configured webhook.
             if clicked_schedule:
+                downloaded_at_utc = datetime.now(timezone.utc).replace(second=0, microsecond=0)
+                # Prefix uploads with download timestamp so downstream tooling can
+                # select the "used" schedule based on filenames (not filesystem times).
+                stamp = downloaded_at_utc.strftime("%Y-%m-%d_%H%MZ")
+                fn_stat_upload = f"{stamp}_{fn_stat}"
                 upload_stats_html_to_drive(
                     st.session_state["all_stats"][i],
-                    fn_stat,
-                    meta={"date": date_str, "schedule_number": i + 1},
+                    fn_stat_upload,
+                    meta={"date": date_str, "schedule_number": i + 1, "downloaded_at_utc": downloaded_at_utc.isoformat()},
                 )
                 # Also upload a small JSON containing just the pairing lines section
                 pairings_lines = extract_pairings_lines_from_stats_html(st.session_state["all_stats"][i])
@@ -1043,6 +1048,7 @@ def main():
                     {
                         "date": date_str,
                         "schedule_number": i + 1,
+                        "downloaded_at_utc": downloaded_at_utc.isoformat(),
                         "pairings_lines": pairings_lines,
                     },
                     ensure_ascii=False,
@@ -1051,7 +1057,7 @@ def main():
                 fn_json = f"Schedule_Statistics_{i+1}_{date_str.replace(' ','_')}_pairings.json"
                 upload_stats_html_to_drive(
                     json_payload,
-                    fn_json,
+                    f"{stamp}_{fn_json}",
                     meta={"date": date_str, "schedule_number": i + 1, "type": "pairings_json"},
                 )
         st.divider()
