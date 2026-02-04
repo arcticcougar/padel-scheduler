@@ -952,10 +952,18 @@ def main():
     default_samples = int(min(max_unique, 200_000)) if max_unique else 200_000
     
 
-    reject_mixed   = st.checkbox("🏳️‍🌈 Prefer Same-Sex Play", value=False)
-    same_sex_matches_count = st.number_input(
-        "Number of same-sex matches", 0, value=3
-    )
+    reject_mixed = st.checkbox("🏳️‍🌈 Prefer Same-Sex Play", value=False)
+    # Only show the count field when same-sex play is enabled.
+    # Preserve the last chosen value even when the input is hidden.
+    if reject_mixed:
+        same_sex_matches_count = st.number_input(
+            "Number of same-sex matches",
+            min_value=0,
+            value=int(st.session_state.get("same_sex_matches_count", 3)),
+            key="same_sex_matches_count",
+        )
+    else:
+        same_sex_matches_count = int(st.session_state.get("same_sex_matches_count", 3))
     enable_skill   = st.checkbox("🎯 Skill-based Matches", value=True)
     show_john_virgo_trickshot = st.checkbox(
         "John Virgo trickshot challenge",
