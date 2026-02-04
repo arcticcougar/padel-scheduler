@@ -3,13 +3,13 @@
 Padel schedule stats dashboard builder (no server required).
 
 Usage (run inside the folder that contains the schedule JSON files):
-  python build_dashboard.py
+  python build_dashboard.py --tz Europe/Madrid
 
 This scans the current directory for JSON files containing:
   { "pairings_lines": [ "Player ♀ [R]: Other ♀ [with,against], ...", ... ] }
 
 It then selects the "Used schedule" for each Tue/Thu session window:
-  - consider only files timestamped (from filename) BEFORE 14:00 local time on that day
+  - assign each file to the NEXT Tue/Thu session cutoff (14:00 local time)
   - pick the latest such file as the Used schedule for that session
 
 Finally, it writes a self-contained dashboard.html in the same folder.
@@ -73,6 +73,7 @@ class ParsedSchedule:
     # edges for unordered pairs: (a,b,with,against)
     edges: list[tuple[str, str, int, int]]
     players: list[str]
+    rests: dict[str, int]
 
 
 def _local_tzinfo() -> dt.tzinfo:
@@ -155,6 +156,7 @@ def parse_schedule_json(path: Path, tz: dt.tzinfo) -> ParsedSchedule | None:
 
     # Build directed map: p -> q -> (with, against)
     directed: dict[str, dict[str, tuple[int, int]]] = {}
+    rests: dict[str, int] = {}
     players_set: set[str] = set()
 
     for raw in pairings_lines:
@@ -175,6 +177,7 @@ def parse_schedule_json(path: Path, tz: dt.tzinfo) -> ParsedSchedule | None:
         if not lm:
             continue
         p = lm.group("name").strip()
+        rests[p] = int(lm.group("rest"))
         players_set.add(p)
         directed.setdefault(p, {})
 
@@ -220,7 +223,7 @@ def parse_schedule_json(path: Path, tz: dt.tzinfo) -> ParsedSchedule | None:
             w, ag = (w_a or w_b or (0, 0))
             edges.append((a, b, int(w), int(ag)))
 
-    return ParsedSchedule(meta=meta, edges=edges, players=players)
+    return ParsedSchedule(meta=meta, edges=edges, players=players, rests=rests)
 
 
 def cutoff_dt_for_day(d: dt.date, tz: dt.tzinfo) -> dt.datetime:
@@ -283,15 +286,55 @@ def pick_used_per_session(schedules: list[ParsedSchedule], tz: dt.tzinfo):
     return sessions, unassigned
 
 
+def load_regular_players_from_app_py(app_py_path: Path) -> list[str]:
+    """Extract REGULAR_PLAYERS names from app.py.
+
+    Keeps only the 'name' fields and returns sorted unique names.
+    """
+    try:
+        txt = app_py_path.read_text(encoding="utf-8", errors="ignore")
+    except Exception:
+        return []
+    # Rough but effective for this codebase: pull {"name": "X", ...} occurrences.
+    names = re.findall(r'{"name"\s*:\s*"([^"]+)"\s*,\s*"gender"', txt)
+    out = sorted(set(names), key=lambda x: x.lower())
+    return out
+
+
+def load_regular_players(cwd: Path) -> list[str]:
+    """Load fixed regular-player list.
+
+    Priority:
+      1) ./app.py
+      2) ../app.py
+      3) ./regular_players.txt (one name per line)
+    """
+    for p in [cwd / "app.py", cwd.parent / "app.py"]:
+        if p.exists():
+            names = load_regular_players_from_app_py(p)
+            if names:
+                return names
+
+    rp = cwd / "regular_players.txt"
+    if rp.exists():
+        names = []
+        for ln in rp.read_text(encoding="utf-8", errors="ignore").splitlines():
+            ln = ln.strip()
+            if ln and not ln.startswith("#"):
+                names.append(ln)
+        return sorted(set(names), key=lambda x: x.lower())
+    return []
+
+
 def build_dashboard_html(data: dict) -> str:
-    # Self-contained HTML with embedded data + vanilla JS (no f-string to avoid JS braces escaping)
     data_json = json.dumps(data, ensure_ascii=False)
+    # New UI: heatmaps + rested bars (regular players only), with live range filtering.
     html = """<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Padel Schedule Dashboard</title>
+  <title>Mijas Padellers Dashboard</title>
   <style>
     body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 20px; color:#111; }
     h1,h2,h3 { margin: 0.4rem 0; }
@@ -301,100 +344,215 @@ def build_dashboard_html(data: dict) -> str:
     .badge { display:inline-block; padding:2px 8px; border-radius:999px; font-size:12px; border:1px solid #ccc; background:#f5f5f5; }
     .badge.used { background:#e8f5e9; border-color:#a5d6a7; }
     .badge.warn { background:#fff3e0; border-color:#ffcc80; }
-    table { border-collapse: collapse; width:100%; }
-    th, td { border:1px solid #ddd; padding:6px 8px; }
-    th { background:#f3f3f3; }
     .controls label { font-size: 12px; display:block; margin-bottom:4px; }
     .controls select, .controls input { padding:6px 8px; }
-    .two-col { display:grid; grid-template-columns: 1fr 1fr; gap:12px; }
-    @media (max-width: 900px) { .two-col { grid-template-columns:1fr; } }
-    canvas { width: 100%; height: 160px; }
+    .inline { display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
+    .gridbound { width: fit-content; max-width: 100%; }
+    .mini { font-size:12px; color:#333; display:flex; gap:6px; align-items:center; white-space:nowrap; }
+    .mini input[type="checkbox"] { transform: translateY(1px); }
+    .range2 {
+      --trackH: 6px;
+      --thumb: 20px; /* ~20% larger */
+      position: relative;
+      height: calc(var(--thumb) + 10px); /* room for hover scaling */
+      width: min(560px, 100%);
+      flex:1;
+      min-width: 280px;
+      overflow: visible;
+    }
+    .range2 .track { position:absolute; left:0; right:0; top:50%; height:var(--trackH); transform: translateY(-50%); background:#e0e0e0; border-radius:999px; pointer-events:none; }
+    .range2 .fill { position:absolute; top:50%; height:var(--trackH); transform: translateY(-50%); background:#1976d2; border-radius:999px; left:0; right:0; pointer-events:none; }
+    /* Extend the input so thumbs can reach the visible track ends */
+    .range2 input[type="range"] { position:absolute; top:50%; transform: translateY(-50%); left: calc(var(--thumb) / -2); width: calc(100% + var(--thumb)); height: var(--thumb); margin:0; padding:0; background:transparent; pointer-events:all; -webkit-appearance:none; appearance:none; }
+    .range2 input[type="range"]::-webkit-slider-thumb { -webkit-appearance:none; width:var(--thumb); height:var(--thumb); border-radius:50%; background:#1976d2; border:2px solid #145ea8; box-shadow:0 0 0 1px rgba(0,0,0,.05); pointer-events:all; margin-top: 0; transition: transform .12s ease, background .12s ease, border-color .12s ease; }
+    .range2 input[type="range"]::-webkit-slider-runnable-track { height:var(--trackH); background:transparent; }
+    .range2 input[type="range"]::-moz-range-thumb { width:var(--thumb); height:var(--thumb); border-radius:50%; background:#1976d2; border:2px solid #145ea8; pointer-events:all; transition: transform .12s ease, background .12s ease, border-color .12s ease; }
+    .range2 input[type="range"]::-moz-range-track { height:var(--trackH); background:transparent; }
+    .range2 input[type="range"]:hover::-webkit-slider-thumb { transform: scale(1.10); background:#2f86dd; border-color:#0f4f8e; }
+    .range2 input[type="range"]:hover::-moz-range-thumb { transform: scale(1.10); background:#2f86dd; border-color:#0f4f8e; }
+    .range2 input[type="range"]:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 3px rgba(25,118,210,.25), 0 0 0 1px rgba(0,0,0,.05); }
+    .range2 input[type="range"]:focus-visible::-moz-range-thumb { box-shadow: 0 0 0 3px rgba(25,118,210,.25); }
+    /* Stack heatmaps vertically (Played Against below Played With) */
+    .two-col { display:grid; grid-template-columns: 1fr; gap:12px; }
+    canvas { width: 100%; height: 140px; }
     details summary { cursor: pointer; }
     code { background:#f6f6f6; padding:2px 4px; border-radius:6px; }
+
+    .seg { display:inline-flex; border:1px solid #ddd; border-radius:10px; overflow:hidden; }
+    .seg button { border:0; background:#fff; padding:6px 10px; cursor:pointer; font-size:12px; }
+    .seg button + button { border-left:1px solid #ddd; }
+    .seg button.active { background:#1976d2; color:#fff; }
+
+    /* No internal grid scrolling: page scrolls instead */
+    .heatwrap { overflow: visible; max-height: none; padding-right: 0; }
+    .heatframe { display:inline-block; border:1px solid #eee; border-radius:10px; overflow:hidden; }
+    :root { --cell: 14px; --xlab: 84px; }
+    table.heatmap { border-collapse: collapse; width: max-content; min-width: 0; display:inline-block; }
+    .heatmap { font-size: 11px; }
+    .heatmap th, .heatmap td { border:1px solid #ddd; padding:0; box-sizing:border-box; font-weight: 400; vertical-align: middle; }
+    /* Y-axis labels */
+    .heatmap th.rowhdr { position: sticky; left: 0; z-index: 3; text-align:left; background:#f3f3f3; }
+    .heatmap td.rowhdr {
+      position: sticky;
+      left: 0;
+      z-index: 1;
+      background:#fff;
+      font-weight: 400;
+      white-space: nowrap;
+      padding: 0 3px;
+      height: var(--cell);
+      line-height: var(--cell);
+      font-size: 12px;
+    }
+    .heatmap td { text-align: center; font-variant-numeric: tabular-nums; }
+    /* Bottom X-axis labels + Rested row */
+    .heatmap tfoot th { background:#f3f3f3; text-align:center; }
+    .heatmap tfoot td { background:#fff; text-align:center; }
+    .heatmap th.colhdr { width: var(--cell); height: var(--xlab); padding:0; position: relative; overflow: hidden; }
+    .heatmap th.colhdr .rot {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: flex-start;       /* top of the header cell */
+      justify-content: center;       /* centered in the column */
+      padding-top: 4px;
+      writing-mode: vertical-rl;     /* stable vertical text layout */
+      transform: rotate(180deg);     /* make it read bottom->top visually */
+      white-space: nowrap;
+      font-size: 10px;
+      font-weight: 400;
+      pointer-events: none;
+    }
+    /* Square data cells */
+    .heatmap td.cell, .heatmap td.diag {
+      width: var(--cell);
+      height: var(--cell);
+      min-width: var(--cell);
+      line-height: var(--cell);
+      font-size: 10px;
+    }
+    .heatmap td.diag { background:#b7d5ff; color: transparent; }
+    .legend { display:flex; align-items:center; gap:10px; margin-top:8px; flex-wrap:wrap; }
+    .grad { height:10px; width:180px; border-radius:999px; background: linear-gradient(90deg, #e8f5ff, #ffd9c8, #d7301f); border:1px solid #ddd; }
+    .bars { overflow:auto; }
+    .bars svg { width: max(900px, 100%); height: 260px; }
   </style>
 </head>
 <body>
-  <h1>Padel Schedule Dashboard</h1>
+  <h1>Mijas Padellers Dashboard</h1>
   <div class="muted">
-    TZ used: <code id="tzUsed"></code> · Built at: <code id="builtAt"></code>
+    Built at: <code id="builtAt"></code>
   </div>
 
   <div class="row" style="margin-top:12px;">
-    <div class="card controls" style="flex:1; min-width:280px;">
-      <div class="row">
-        <div style="min-width:240px;">
-          <label>Player</label>
-          <select id="playerSelect" style="min-width:240px;"></select>
-        </div>
-        <div style="min-width:200px;">
-          <label>Scope</label>
-          <select id="scopeSelect">
-            <option value="all">All-time (Used schedules)</option>
-            <option value="ytd">Year-to-date (Used schedules)</option>
-            <option value="custom">Custom session range (Used schedules)</option>
-          </select>
-        </div>
-        <div>
-          <label>&nbsp;</label>
-          <label style="display:flex;gap:8px;align-items:center;">
-            <input type="checkbox" id="includeCandidates" />
-            Include all candidates (auditing)
-          </label>
-        </div>
-      </div>
-      <div id="customRange" style="margin-top:10px; display:none;">
-        <div class="row">
-          <div style="flex:1; min-width:220px;">
-            <label>Start session</label>
-            <input type="range" id="rangeStart" min="0" max="0" value="0" />
-          </div>
-          <div style="flex:1; min-width:220px;">
-            <label>End session</label>
-            <input type="range" id="rangeEnd" min="0" max="0" value="0" />
-          </div>
-          <div class="muted" id="rangeLabel" style="min-width:260px;"></div>
-        </div>
-        <canvas id="timeline"></canvas>
+    <div class="card controls" style="flex:1; min-width:320px;">
+      <div class="inline gridbound" id="controlsBound">
+            <div class="range2">
+              <div class="track"></div>
+              <div class="fill" id="rangeFill"></div>
+              <input type="range" id="rangeMin" min="0" max="0" value="0" />
+              <input type="range" id="rangeMax" min="0" max="0" value="0" />
+            </div>
+            <span class="muted" id="rangeLabel"></span>
+            <label class="mini" style="margin-left:auto;">
+              <input type="checkbox" id="includeCandidates" />
+              Include all candidates
+            </label>
       </div>
     </div>
 
-    <div class="card" style="min-width:280px;">
-      <h3>Selection logic</h3>
-      <div class="muted">
-        Tue/Thu sessions. Used schedule is the latest file timestamp before <code>14:00</code> local on that day.
-        Timestamps come from filesystem (created preferred; else modified).
-      </div>
-    </div>
-  </div>
-
-  <div class="two-col" style="margin-top:12px;">
-    <div class="card">
-      <h3>Played with (selected player)</h3>
-      <div id="withTable"></div>
-    </div>
-    <div class="card">
-      <h3>Played against (selected player)</h3>
-      <div id="againstTable"></div>
-    </div>
   </div>
 
   <div class="card" style="margin-top:12px;">
-    <h3>Sessions & file audit</h3>
-    <div id="audit"></div>
+    <div class="row gridbound" id="modesBound" style="align-items:center; justify-content:space-between;">
+      <h3 id="gridTitle" style="margin:0;">Played With (regulars)</h3>
+      <div class="inline" style="gap:10px; justify-content:flex-end;">
+        <div class="seg" role="group" aria-label="Heatmap mode">
+          <button id="modeWithBtn" type="button" class="active">With</button>
+          <button id="modeAgainstBtn" type="button">Against</button>
+        </div>
+        <div class="seg" role="group" aria-label="Metric mode">
+          <button id="metricRawBtn" type="button" class="active">Raw</button>
+          <button id="metricNormBtn" type="button">Norm</button>
+        </div>
+      </div>
+    </div>
+    <div class="muted" style="margin-top:6px;">Shortcuts: <code>T</code> toggle with/against · <code>N</code> normalize · <code>C</code> include candidates</div>
+    <div class="heatwrap" id="heatGrid"></div>
+    <div class="legend"><span class="muted">cool</span><div class="grad"></div><span class="muted">hot</span> <span class="muted" id="heatMinMax"></span></div>
   </div>
+
+  <details class="card" style="margin-top:12px;">
+    <summary><b>Sessions & file audit</b> <span class="muted">(collapsed)</span></summary>
+    <div style="margin-top:10px;">
+      <h3 style="margin:0;">Selection logic</h3>
+      <div class="muted" style="margin-top:6px;">
+        Tue/Thu sessions. Each file is assigned to the next session cutoff at <code>14:00</code> local.
+        Used schedule is the latest file assigned to that session.
+      </div>
+      <div class="muted" id="regularNote" style="margin-top:6px;"></div>
+    </div>
+    <div id="audit" style="margin-top:10px;"></div>
+  </details>
 
   <script>
   const DATA = __EMBEDDED_DATA__;
 
   function byId(x) { return document.getElementById(x); }
-  function uniq(arr) { return Array.from(new Set(arr)); }
+  let gridMode = 'with'; // 'with' | 'against'
+  let metricMode = 'raw'; // 'raw' | 'norm'
+  let gridData = null;   // { usedPlayers, withM, againstM, withN, againstN, maxRawBoth, maxNormBoth, rests, restsNorm }
 
-  function ytdStartDate(tzNowISO) {
-    const now = new Date(tzNowISO);
-    return new Date(now.getFullYear(), 0, 1);
+  function fmtDateUK(isoYmd) {
+    // "YYYY-MM-DD" -> "DD-MM-YYYY"
+    if (!isoYmd || isoYmd.length < 10) return isoYmd || '';
+    const y = isoYmd.slice(0, 4), mo = isoYmd.slice(5, 7), d = isoYmd.slice(8, 10);
+    if (isoYmd[4] !== '-' || isoYmd[7] !== '-') return isoYmd;
+    return `${d}-${mo}-${y}`;
   }
 
-  function computeIncludedFiles(scope, includeCandidates, customStartIdx, customEndIdx) {
+  function fmtTsUK(isoTs) {
+    // "YYYY-MM-DDTHH:MM...(+HH:MM|Z)" -> "DD-MM-YYYY HH:MM +HH:MM"
+    if (!isoTs || isoTs.length < 16) return isoTs || '';
+    const date = isoTs.slice(0, 10);
+    const time = isoTs.slice(11, 16);
+    if (isoTs[10] !== 'T') return isoTs;
+    let off = '';
+    if (isoTs.endsWith('Z')) off = '+00:00';
+    else {
+      const pPlus = isoTs.lastIndexOf('+');
+      const pMinus = isoTs.lastIndexOf('-');
+      const p = Math.max(pPlus, pMinus);
+      if (p > 15 && isoTs.length - p >= 6) off = isoTs.slice(p, p + 6);
+    }
+    return `${fmtDateUK(date)} ${time}${off ? ' ' + off : ''}`;
+  }
+
+  function setGridMode(mode) {
+    gridMode = mode === 'against' ? 'against' : 'with';
+    const withBtn = byId('modeWithBtn');
+    const againstBtn = byId('modeAgainstBtn');
+    if (withBtn && againstBtn) {
+      withBtn.classList.toggle('active', gridMode === 'with');
+      againstBtn.classList.toggle('active', gridMode === 'against');
+    }
+    const title = byId('gridTitle');
+    if (title) title.textContent = gridMode === 'with' ? 'Played With (regulars)' : 'Played Against (regulars)';
+    renderCurrentGrid();
+  }
+
+  function setMetricMode(mode) {
+    metricMode = mode === 'norm' ? 'norm' : 'raw';
+    const rawBtn = byId('metricRawBtn');
+    const normBtn = byId('metricNormBtn');
+    if (rawBtn && normBtn) {
+      rawBtn.classList.toggle('active', metricMode === 'raw');
+      normBtn.classList.toggle('active', metricMode === 'norm');
+    }
+    renderCurrentGrid();
+  }
+
+  function computeIncludedFiles(includeCandidates, startIdx, endIdx) {
     const sessions = DATA.sessions;
     const used = [];
     const cands = [];
@@ -405,84 +563,123 @@ def build_dashboard_html(data: dict) -> str:
     });
 
     let rows = includeCandidates ? cands : used;
-
-    if (scope === 'ytd') {
-      const start = ytdStartDate(DATA.tz_now_iso);
-      rows = rows.filter(r => r.date >= start);
-    } else if (scope === 'custom') {
-      const a = Math.min(customStartIdx, customEndIdx);
-      const b = Math.max(customStartIdx, customEndIdx);
-      rows = rows.filter(r => r.idx >= a && r.idx <= b);
-    }
-
+    const a = Math.min(startIdx, endIdx);
+    const b = Math.max(startIdx, endIdx);
+    rows = rows.filter(r => r.idx >= a && r.idx <= b);
     return rows.map(r => r.file);
   }
 
-  function aggregateEdges(fileNames) {
-    const edgesByFile = DATA.files;
-    const acc = new Map();
-    const players = new Set();
-    fileNames.forEach(fn => {
-      const f = edgesByFile[fn];
-      if (!f) return;
-      f.players.forEach(p => players.add(p));
-      f.edges.forEach(e => {
-        const a = e[0], b = e[1], w = e[2], ag = e[3];
-        const aa = a < b ? a : b;
-        const bb = a < b ? b : a;
-        const key = aa + '||' + bb;
-        const prev = acc.get(key) || [aa, bb, 0, 0];
-        prev[2] += w;
-        prev[3] += ag;
-        acc.set(key, prev);
-      });
-    });
-    return { players: Array.from(players).sort((x,y)=>x.localeCompare(y)), edges: Array.from(acc.values()) };
+  function colorFor(value, max) {
+    if (max <= 0) return '#fff';
+    const t = Math.min(1, Math.max(0, value / max));
+    const stops = [
+      {t:0.0, c:[232,245,255]},  // #e8f5ff
+      {t:0.6, c:[255,217,200]},  // #ffd9c8
+      {t:1.0, c:[215,48,31]}     // #d7301f
+    ];
+    let a = stops[0], b = stops[stops.length-1];
+    for (let i=0;i<stops.length-1;i++){
+      if (t >= stops[i].t && t <= stops[i+1].t){ a=stops[i]; b=stops[i+1]; break; }
+    }
+    const u = (t - a.t) / (b.t - a.t || 1);
+    const r = Math.round(a.c[0] + (b.c[0]-a.c[0])*u);
+    const g = Math.round(a.c[1] + (b.c[1]-a.c[1])*u);
+    const bl = Math.round(a.c[2] + (b.c[2]-a.c[2])*u);
+    return `rgb(${r},${g},${bl})`;
   }
 
-  function buildPlayerMaps(agg) {
-    const withMap = new Map();
-    const againstMap = new Map();
-    agg.players.forEach(p => { withMap.set(p, new Map()); againstMap.set(p, new Map()); });
-    agg.edges.forEach(([a,b,w,ag]) => {
-      withMap.get(a).set(b, (withMap.get(a).get(b)||0) + w);
-      withMap.get(b).set(a, (withMap.get(b).get(a)||0) + w);
-      againstMap.get(a).set(b, (againstMap.get(a).get(b)||0) + ag);
-      againstMap.get(b).set(a, (againstMap.get(b).get(a)||0) + ag);
+  function renderHeatmap(containerId, playersOrdered, matrix, maxVal, modeLabel, restsMap) {
+    const el = byId(containerId);
+    if (!playersOrdered.length) {
+      el.innerHTML = '<div class="muted">No regular players loaded.</div>';
+      return;
+    }
+    let html = '<div class="heatframe"><table class="heatmap"><tbody>';
+    for (let i=0;i<playersOrdered.length;i++){
+      const rp = playersOrdered[i];
+      html += `<tr><td class="rowhdr">${rp}</td>`;
+      for (let j=0;j<playersOrdered.length;j++){
+        if (i===j){
+          html += `<td class="diag"></td>`;
+          continue;
+        }
+        const v = matrix[i][j] || 0;
+        const bg = colorFor(v, maxVal);
+        const lbl = modeLabel || 'vs';
+        const show = (metricMode === 'raw') ? (v ? String(v) : '') : '';
+        const tipVal = (metricMode === 'raw') ? v : (Math.round(v * 1000) / 1000);
+        html += `<td class="cell" title="${rp} ${lbl} ${playersOrdered[j]}: ${tipVal}" style="background:${bg};">${show}</td>`;
+      }
+      html += '</tr>';
+    }
+    html += '</tbody><tfoot><tr><th class="rowhdr">Player</th>';
+    playersOrdered.forEach(p => { html += `<th class="colhdr"><span class="rot">${p}</span></th>`; });
+    html += '</tr>';
+    html += '<tr><td class="rowhdr">Rested</td>';
+    playersOrdered.forEach(p => {
+      const v = restsMap ? (restsMap.get(p) || 0) : 0;
+      const show = (metricMode === 'raw') ? String(v) : String(Math.round(v * 100) / 100);
+      html += `<td class="cell restcell" title="${p} rested: ${show}">${show}</td>`;
     });
-    return {withMap, againstMap};
+    html += '</tr></tfoot></table></div>';
+    el.innerHTML = html;
   }
 
-  function renderTable(m, player) {
-    const mp = m.get(player);
-    if (!mp) return '<div class="muted">No data in this range.</div>';
-    const rows = Array.from(mp.entries())
-      .filter(([_,v]) => v > 0)
-      .sort((a,b)=>b[1]-a[1]);
-    if (rows.length === 0) return '<div class="muted">No data in this range.</div>';
-    let html = '<table><thead><tr><th>Other</th><th style="text-align:right;">Count</th></tr></thead><tbody>';
-    rows.forEach(([name, count]) => {
-      html += `<tr><td>${name}</td><td style="text-align:right;">${count}</td></tr>`;
+  function renderCurrentGrid() {
+    if (!gridData) return;
+    const m =
+      (metricMode === 'norm')
+        ? (gridMode === 'against' ? gridData.againstN : gridData.withN)
+        : (gridMode === 'against' ? gridData.againstM : gridData.withM);
+    const lbl = gridMode === 'against' ? 'against' : 'with';
+    const maxVal = (metricMode === 'norm') ? gridData.maxNormBoth : gridData.maxRawBoth;
+    const restsMap = (metricMode === 'norm') ? gridData.restsNorm : gridData.rests;
+    renderHeatmap('heatGrid', gridData.usedPlayers, m, maxVal, lbl, restsMap);
+    const mm = byId('heatMinMax');
+    if (mm) mm.textContent = `scale min 0 → max ${metricMode === 'norm' ? (Math.round(maxVal * 1000) / 1000) : maxVal}`;
+  }
+
+  function renderRests(containerId, playersOrdered, restsMap) {
+    const el = byId(containerId);
+    const counts = playersOrdered.map(p => restsMap.get(p) || 0);
+    const maxVal = Math.max(0, ...counts);
+    const w = Math.max(900, playersOrdered.length * 22 + 180);
+    const h = 260;
+    const padL = 60, padR = 20, padT = 20, padB = 80;
+    const plotW = w - padL - padR;
+    const plotH = h - padT - padB;
+    const bw = plotW / Math.max(1, playersOrdered.length);
+    let svg = `<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="xMinYMin meet">`;
+    svg += `<line x1="${padL}" y1="${padT+plotH}" x2="${padL+plotW}" y2="${padT+plotH}" stroke="#999" />`;
+    playersOrdered.forEach((p, i) => {
+      const v = counts[i];
+      const bh = maxVal ? (v / maxVal) * plotH : 0;
+      const x = padL + i * bw + 2;
+      const y = padT + plotH - bh;
+      svg += `<rect x="${x}" y="${y}" width="${Math.max(1, bw-4)}" height="${bh}" fill="#1976d2" opacity="0.85"><title>${p}: rested ${v}</title></rect>`;
+      const tx = padL + i * bw + bw/2;
+      svg += `<text x="${tx}" y="${padT+plotH+14}" font-size="10" text-anchor="end" transform="rotate(-60 ${tx} ${padT+plotH+14})">${p}</text>`;
     });
-    html += '</tbody></table>';
-    return html;
+    svg += `<text x="${padL-10}" y="${padT+12}" font-size="11" text-anchor="end">rest</text>`;
+    svg += `</svg>`;
+    el.innerHTML = `<div class="muted" style="margin-bottom:6px;">Max rested in range: ${maxVal}</div>` + svg;
   }
 
   function renderAudit() {
     const el = byId('audit');
     if (DATA.sessions.length === 0) {
-      el.innerHTML = '<div class="muted">No Tue/Thu session candidates found (before 14:00) in this folder.</div>';
+      el.innerHTML = '<div class="muted">No sessions found in this folder.</div>';
       return;
     }
     let html = '';
     DATA.sessions.forEach((s) => {
-      html += `<details style="margin-bottom:8px;"><summary><span class="badge used">Used</span> <b>${s.session_date}</b> → <code>${s.used}</code> <span class="muted">(cutoff ${s.cutoff_local})</span></summary>`;
+      html += `<details style="margin-bottom:8px;"><summary><span class="badge used">Used</span> <b>${fmtDateUK(s.session_date)}</b> → <code>${s.used}</code> <span class="muted">(cutoff ${fmtTsUK(s.cutoff_local)})</span></summary>`;
       html += '<div style="padding:8px 0 0 0;">';
       html += '<div class="muted">Candidates considered for this session window:</div>';
       html += '<ul style="margin-top:6px;">';
       s.candidates.forEach(fn => {
         const meta = DATA.files[fn]?.meta;
-        const ts = meta ? meta.ts_iso : 'unknown';
+        const ts = meta ? fmtTsUK(meta.ts_iso) : 'unknown';
         const src = meta ? meta.ts_source : 'unknown';
         const badge = fn === s.used ? '<span class="badge used">Used schedule picked for session</span>' : '<span class="badge">Candidate</span>';
         html += `<li>${badge} <code>${fn}</code> <span class="muted">(${ts}, ${src})</span></li>`;
@@ -490,106 +687,190 @@ def build_dashboard_html(data: dict) -> str:
       html += '</ul>';
       html += '</div></details>';
     });
-
-    if (DATA.unassigned.length) {
-      html += `<details><summary><span class="badge warn">Unassigned</span> Files not considered (non Tue/Thu or after cutoff)</summary>`;
-      html += '<ul style="margin-top:6px;">';
-      DATA.unassigned.forEach(fn => {
-        const meta = DATA.files[fn]?.meta;
-        const ts = meta ? meta.ts_iso : 'unknown';
-        const src = meta ? meta.ts_source : 'unknown';
-        html += `<li><code>${fn}</code> <span class="muted">(${ts}, ${src})</span></li>`;
-      });
-      html += '</ul></details>';
-    }
     el.innerHTML = html;
   }
 
-  function drawTimeline() {
-    const canvas = byId('timeline');
-    const ctx = canvas.getContext('2d');
-    const dpr = window.devicePixelRatio || 1;
-    const w = canvas.clientWidth;
-    const h = canvas.clientHeight;
-    canvas.width = Math.floor(w * dpr);
-    canvas.height = Math.floor(h * dpr);
-    ctx.setTransform(dpr,0,0,dpr,0,0);
-    ctx.clearRect(0,0,w,h);
-
-    const sessions = DATA.sessions;
-    if (!sessions.length) return;
-    const start = parseInt(byId('rangeStart').value, 10);
-    const end = parseInt(byId('rangeEnd').value, 10);
-    const a = Math.min(start, end);
-    const b = Math.max(start, end);
-
-    const pad = 18;
-    const barW = Math.max(2, (w - pad*2) / sessions.length);
-    for (let i=0;i<sessions.length;i++) {
-      const x = pad + i * barW;
-      const inRange = i>=a && i<=b;
-      ctx.fillStyle = inRange ? '#1976d2' : '#cfd8dc';
-      ctx.fillRect(x, h-40, Math.max(1, barW-1), 22);
-    }
-    ctx.fillStyle = '#555';
-    ctx.font = '12px system-ui, sans-serif';
-    ctx.fillText(sessions[a].session_date, pad, 18);
-    ctx.fillText(sessions[b].session_date, pad, 34);
-  }
-
   function refresh() {
-    byId('tzUsed').textContent = DATA.tz_used;
-    byId('builtAt').textContent = DATA.built_at;
-
-    const scope = byId('scopeSelect').value;
-    byId('customRange').style.display = scope === 'custom' ? '' : 'none';
+    byId('builtAt').textContent = DATA.built_at_display || DATA.built_at;
 
     const includeCandidates = byId('includeCandidates').checked;
-    const startIdx = parseInt(byId('rangeStart').value, 10);
-    const endIdx = parseInt(byId('rangeEnd').value, 10);
+    const startIdxRaw = parseInt(byId('rangeMin').value, 10);
+    const endIdxRaw = parseInt(byId('rangeMax').value, 10);
+    const startIdx = startIdxRaw;
+    const endIdx = endIdxRaw;
 
-    const included = computeIncludedFiles(scope, includeCandidates, startIdx, endIdx);
-    const agg = aggregateEdges(included);
-    const maps = buildPlayerMaps(agg);
+    // Keep thumbs from crossing
+    if (startIdxRaw > endIdxRaw) {
+      byId('rangeMax').value = String(startIdxRaw);
+    }
+    const included = computeIncludedFiles(includeCandidates, startIdx, endIdx);
 
-    const player = byId('playerSelect').value;
-    byId('withTable').innerHTML = renderTable(maps.withMap, player);
-    byId('againstTable').innerHTML = renderTable(maps.againstMap, player);
+    const regularPlayers = DATA.regular_players || [];
+    const regularSet = new Set(regularPlayers);
+    if (regularPlayers.length) {
+      byId('regularNote').textContent = `Regulars loaded: ${regularPlayers.length} (guests ignored).`;
+    } else {
+      byId('regularNote').textContent = "No regular list found (put app.py or regular_players.txt next to build_dashboard.py). Falling back to all names in data.";
+    }
 
-    if (scope === 'custom' && DATA.sessions.length) {
+    // Aggregate directly from included files
+    const playersOrdered = regularPlayers.length ? regularPlayers : [];
+    const idxMap = new Map();
+    const usedPlayers = playersOrdered.length ? playersOrdered : [];
+    // If no regular list, gather from included files
+    if (!playersOrdered.length) {
+      const set = new Set();
+      included.forEach(fn => {
+        const f = DATA.files[fn];
+        if (!f) return;
+        (f.players || []).forEach(p => set.add(p));
+      });
+      usedPlayers.push(...Array.from(set).sort((a,b)=>a.localeCompare(b)));
+    }
+    usedPlayers.forEach((p,i)=>idxMap.set(p,i));
+
+    const n = usedPlayers.length;
+    const withM = Array.from({length:n}, ()=>Array.from({length:n}, ()=>0));
+    const againstM = Array.from({length:n}, ()=>Array.from({length:n}, ()=>0));
+    const rests = new Map();
+    const attendance = new Map();
+    usedPlayers.forEach(p => attendance.set(p, 0));
+    let maxWith = 0, maxAgainst = 0;
+
+    included.forEach(fn => {
+      const f = DATA.files[fn];
+      if (!f) return;
+      (f.edges || []).forEach(e => {
+        const a = e[0], b = e[1], w = e[2], ag = e[3];
+        if (regularPlayers.length && (!regularSet.has(a) || !regularSet.has(b))) return;
+        if (!idxMap.has(a) || !idxMap.has(b)) return;
+        const i = idxMap.get(a), j = idxMap.get(b);
+        withM[i][j] += w; withM[j][i] += w;
+        againstM[i][j] += ag; againstM[j][i] += ag;
+        if (withM[i][j] > maxWith) maxWith = withM[i][j];
+        if (againstM[i][j] > maxAgainst) maxAgainst = againstM[i][j];
+      });
+      const r = f.rests || {};
+      Object.keys(r).forEach(p => {
+        if (regularPlayers.length && !regularSet.has(p)) return;
+        if (!idxMap.has(p)) return;
+        rests.set(p, (rests.get(p) || 0) + (r[p] || 0));
+      });
+      // Attendance: count sessions a player appears in (using rests keys is robust)
+      Object.keys(r).forEach(p => {
+        if (regularPlayers.length && !regularSet.has(p)) return;
+        if (!attendance.has(p)) return;
+        attendance.set(p, (attendance.get(p) || 0) + 1);
+      });
+    });
+
+    const maxRawBoth = Math.max(maxWith, maxAgainst);
+    // Normalized by row player's attendance (may be asymmetric)
+    const withN = Array.from({length:n}, ()=>Array.from({length:n}, ()=>0));
+    const againstN = Array.from({length:n}, ()=>Array.from({length:n}, ()=>0));
+    const restsNorm = new Map();
+    let maxNormBoth = 0;
+    for (let i=0;i<n;i++){
+      const p = usedPlayers[i];
+      const denom = attendance.get(p) || 0;
+      if (denom <= 0) { restsNorm.set(p, 0); continue; }
+      restsNorm.set(p, (rests.get(p) || 0) / denom);
+      for (let j=0;j<n;j++){
+        if (i===j) continue;
+        withN[i][j] = withM[i][j] / denom;
+        againstN[i][j] = againstM[i][j] / denom;
+        if (withN[i][j] > maxNormBoth) maxNormBoth = withN[i][j];
+        if (againstN[i][j] > maxNormBoth) maxNormBoth = againstN[i][j];
+      }
+    }
+    gridData = { usedPlayers, withM, againstM, withN, againstN, maxRawBoth, maxNormBoth, rests, restsNorm };
+    renderCurrentGrid();
+    syncToGridWidth();
+    if (DATA.sessions.length) {
       const a = Math.min(startIdx, endIdx);
       const b = Math.max(startIdx, endIdx);
-      byId('rangeLabel').textContent = `Sessions ${a+1}..${b+1} (${DATA.sessions[a].session_date} → ${DATA.sessions[b].session_date})`;
-      drawTimeline();
+      byId('rangeLabel').textContent = `#${a+1}–#${b+1} (${fmtDateUK(DATA.sessions[a].session_date)}→${fmtDateUK(DATA.sessions[b].session_date)})`;
+    } else {
+      byId('rangeLabel').textContent = '(no sessions)';
     }
+
+    // Update slider fill
+    updateRangeFill();
+  }
+
+  function updateRangeFill() {
+    const fill = byId('rangeFill');
+    const n = DATA.sessions.length;
+    if (!fill || n <= 1) return;
+    const min = parseInt(byId('rangeMin').value, 10);
+    const max = parseInt(byId('rangeMax').value, 10);
+    const lo = Math.min(min, max) / (n - 1);
+    const hi = Math.max(min, max) / (n - 1);
+    fill.style.left = (lo * 100) + '%';
+    fill.style.right = (100 - hi * 100) + '%';
+  }
+
+  function syncToGridWidth() {
+    const frame = document.querySelector('#heatGrid .heatframe');
+    const w = frame ? frame.getBoundingClientRect().width : 0;
+    if (!w) return;
+    const px = Math.ceil(w) + 'px';
+    const controls = byId('controlsBound');
+    const modes = byId('modesBound');
+    if (controls) controls.style.width = px;
+    if (modes) modes.style.width = px;
   }
 
   function init() {
-    const playerNames = uniq(Object.values(DATA.files).flatMap(f => f.players));
-    const sel = byId('playerSelect');
-    playerNames.sort((a,b)=>a.localeCompare(b));
-    playerNames.forEach(p => {
-      const opt = document.createElement('option');
-      opt.value = p;
-      opt.textContent = p;
-      sel.appendChild(opt);
-    });
-    if (playerNames.length) sel.value = playerNames[0];
-
     const n = DATA.sessions.length;
-    byId('rangeStart').max = Math.max(0, n-1);
-    byId('rangeEnd').max = Math.max(0, n-1);
-    byId('rangeStart').value = 0;
-    byId('rangeEnd').value = Math.max(0, n-1);
+    byId('rangeMin').max = Math.max(0, n-1);
+    byId('rangeMax').max = Math.max(0, n-1);
+    byId('rangeMin').value = 0;
+    byId('rangeMax').value = Math.max(0, n-1);
+    // Ensure handles are always draggable and ordered
+    byId('rangeMin').addEventListener('input', () => {
+      const a = parseInt(byId('rangeMin').value, 10);
+      const b = parseInt(byId('rangeMax').value, 10);
+      if (a > b) byId('rangeMax').value = String(a);
+      updateRangeFill();
+    });
+    byId('rangeMax').addEventListener('input', () => {
+      const a = parseInt(byId('rangeMin').value, 10);
+      const b = parseInt(byId('rangeMax').value, 10);
+      if (b < a) byId('rangeMin').value = String(b);
+      updateRangeFill();
+    });
 
-    ['playerSelect','scopeSelect','includeCandidates','rangeStart','rangeEnd'].forEach(id => {
+    ['includeCandidates','rangeMin','rangeMax'].forEach(id => {
       byId(id).addEventListener('input', refresh);
       byId(id).addEventListener('change', refresh);
     });
-    window.addEventListener('resize', () => { if (byId('scopeSelect').value === 'custom') drawTimeline(); });
+    byId('modeWithBtn').addEventListener('click', () => setGridMode('with'));
+    byId('modeAgainstBtn').addEventListener('click', () => setGridMode('against'));
+    byId('metricRawBtn').addEventListener('click', () => setMetricMode('raw'));
+    byId('metricNormBtn').addEventListener('click', () => setMetricMode('norm'));
+    document.addEventListener('keydown', (e) => {
+      // Ignore typing in inputs/selects
+      const tag = (e.target && e.target.tagName) ? e.target.tagName.toLowerCase() : '';
+      if (tag === 'input' || tag === 'select' || tag === 'textarea') return;
+      const k = (e.key || '').toLowerCase();
+      if (k === 't') setGridMode(gridMode === 'with' ? 'against' : 'with');
+      else if (k === 'n') setMetricMode(metricMode === 'raw' ? 'norm' : 'raw');
+      else if (k === 'c') {
+        const cb = byId('includeCandidates');
+        cb.checked = !cb.checked;
+        refresh();
+      }
+    });
 
     renderAudit();
+    setGridMode('with');
+    setMetricMode('raw');
+    updateRangeFill();
     refresh();
+    // After first render, align controls to grid
+    setTimeout(syncToGridWidth, 0);
+    window.addEventListener('resize', () => { syncToGridWidth(); });
   }
 
   init();
@@ -638,16 +919,32 @@ def main() -> int:
             "meta": dataclasses.asdict(s.meta),
             "players": s.players,
             "edges": s.edges,
+            "rests": s.rests,
         }
 
     tz_now_iso = dt.datetime.now(tz=tz).isoformat(timespec="seconds")
+    built_at_dt = dt.datetime.now(tz=tz)
+    built_at_iso = built_at_dt.isoformat(timespec="seconds")
+    built_at_display = built_at_dt.strftime("%d-%m-%Y %H:%M %z")
+    if len(built_at_display) >= 5:
+        built_at_display = built_at_display[:-2] + ":" + built_at_display[-2:]
+    regular_players = load_regular_players(cwd)
+    if not regular_players:
+        print(
+            "ERROR: Could not load regular players list. Put app.py next to this script, "
+            "or create regular_players.txt (one name per line).",
+            file=sys.stderr,
+        )
+        return 2
     payload = {
-        "built_at": dt.datetime.now(tz=tz).isoformat(timespec="seconds"),
+        "built_at": built_at_iso,
+        "built_at_display": built_at_display,
         "tz_used": tz_label,
         "tz_now_iso": tz_now_iso,
         "sessions": sessions,
         "unassigned": [s.meta.filename for s in unassigned],
         "files": files_dict,
+        "regular_players": regular_players,
     }
 
     out_html = build_dashboard_html(payload)

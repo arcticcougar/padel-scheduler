@@ -479,7 +479,9 @@ def assign_matches(names, genders, skills, courts, court_sz=4, total_matches=6,
                    same_sex_matches_count=0,
                    use_downstairs_rotation=False,
                    start_dt: datetime | None = None,
-                   match_offset: int = 0):
+                   match_offset: int = 0,
+                   header_html: str = "",
+                   first_page_footer_html: str = ""):
     n_players   = len(names)
     courts_used = determine_courts_to_use(n_players, len(courts), court_sz)
 
@@ -573,27 +575,43 @@ def assign_matches(names, genders, skills, courts, court_sz=4, total_matches=6,
                 all_matches.append((groups_full, to_bench_up))
                 match_counter += 1
 
-        # Build schedule HTML with block labels and downstairs badge
+        # Build schedule HTML pages (matches grouped per printable page)
         matches_per_page = 3 if len(courts) <= 4 else 2
-        html_blocks = []
-        # Build time labels: each match is 15 minutes starting from sess_time
+        match_blocks: list[str] = []
         for idx, (groups, bench) in enumerate(all_matches):
-            if idx and idx % matches_per_page == 0:
-                html_blocks.append("<div style='page-break-after: always;'></div>")
             # Compute block label from match index
             bidx = idx // 2
             # When downstairs rotation is enabled, don't show block tag in downloadable HTML
             block_for_title = None if use_downstairs_rotation else block_label(bidx)
             base_dt = start_dt if start_dt else datetime.combine(date.today(), time(hour=10, minute=30))
-            slot_start = base_dt + timedelta(minutes=15*idx)
-            slot_end   = slot_start + timedelta(minutes=15)
+            slot_start = base_dt + timedelta(minutes=15 * idx)
+            slot_end = slot_start + timedelta(minutes=15)
             time_label = f"{slot_start.strftime('%H:%M')}-{slot_end.strftime('%H:%M')}"
-            html_blocks.append(format_match_table_html(idx, groups, courts, names, bench,
-                                                       block_tag=block_for_title,
-                                                       downstairs_idx=down_idx,
-                                                       time_label=time_label,
-                                                       match_offset=match_offset))
-        schedule_html = "".join(html_blocks)
+            match_blocks.append(
+                format_match_table_html(
+                    idx, groups, courts, names, bench,
+                    block_tag=block_for_title,
+                    downstairs_idx=down_idx,
+                    time_label=time_label,
+                    match_offset=match_offset
+                )
+            )
+
+        pages: list[str] = []
+        for page_start in range(0, len(match_blocks), matches_per_page):
+            page_no = page_start // matches_per_page
+            chunk = "".join(match_blocks[page_start:page_start + matches_per_page])
+            top = (header_html + chunk) if page_no == 0 else chunk
+            footer = f"<div class='first-page-footer'>{first_page_footer_html}</div>" if (page_no == 0 and first_page_footer_html) else ""
+            pages.append(
+                "<div class='page' style='page-break-after: always;'>"
+                f"<div class='page-content'>{top}</div>"
+                f"{footer}"
+                "</div>"
+            )
+        if pages:
+            pages[-1] = pages[-1].replace("page-break-after: always;", "page-break-after: auto;", 1)
+        schedule_html = "".join(pages)
         return schedule_html, teammate_mtx, opponent_mtx, rest_track, all_matches, courts_used
 
     # -------- default flow (no downstairs rotation) --------
@@ -639,22 +657,37 @@ def assign_matches(names, genders, skills, courts, court_sz=4, total_matches=6,
             for p in benched:
                 rest_track[p] += 1
 
-    # ------------ build schedule HTML with page breaks ---------------------
+    # ------------ build schedule HTML pages (print-friendly) ----------------
     matches_per_page = 3 if courts_used <= 4 else 2
-    html_blocks = []
-    # Build time labels: each match is 15 minutes starting from sess_time
+    match_blocks: list[str] = []
     base_dt = start_dt if start_dt else datetime.combine(date.today(), time(hour=10, minute=30))
     for idx, (groups, bench) in enumerate(all_matches):
-        if idx and idx % matches_per_page == 0:
-            html_blocks.append("<div style='page-break-after: always;'></div>")
-        slot_start = base_dt + timedelta(minutes=15*idx)
-        slot_end   = slot_start + timedelta(minutes=15)
+        slot_start = base_dt + timedelta(minutes=15 * idx)
+        slot_end = slot_start + timedelta(minutes=15)
         time_label = f"{slot_start.strftime('%H:%M')}-{slot_end.strftime('%H:%M')}"
-        html_blocks.append(format_match_table_html(idx, groups, courts,
-                                                   names, bench,
-                                                   time_label=time_label,
-                                                   match_offset=match_offset))
-    schedule_html = "".join(html_blocks)
+        match_blocks.append(
+            format_match_table_html(
+                idx, groups, courts, names, bench,
+                time_label=time_label,
+                match_offset=match_offset
+            )
+        )
+
+    pages: list[str] = []
+    for page_start in range(0, len(match_blocks), matches_per_page):
+        page_no = page_start // matches_per_page
+        chunk = "".join(match_blocks[page_start:page_start + matches_per_page])
+        top = (header_html + chunk) if page_no == 0 else chunk
+        footer = f"<div class='first-page-footer'>{first_page_footer_html}</div>" if (page_no == 0 and first_page_footer_html) else ""
+        pages.append(
+            "<div class='page' style='page-break-after: always;'>"
+            f"<div class='page-content'>{top}</div>"
+            f"{footer}"
+            "</div>"
+        )
+    if pages:
+        pages[-1] = pages[-1].replace("page-break-after: always;", "page-break-after: auto;", 1)
+    schedule_html = "".join(pages)
     # ----------------------------------------------------------------------
 
     return schedule_html, teammate_mtx, opponent_mtx, rest_track, all_matches, courts_used
@@ -964,7 +997,19 @@ def main():
                     same_sex_matches_count=same_sex_matches_count,
                     use_downstairs_rotation=use_downstairs_rotation,
                     start_dt=datetime.combine(sess_date, sess_time),
-                    match_offset=max(0, int(start_match_number) - 1))
+                    match_offset=max(0, int(start_match_number) - 1),
+                    header_html=(
+                        "<h1 class='sched-title'>Mijas Padellers Match Schedule</h1>"
+                        f"<h2 class='sched-date'>{date_str}</h2>"
+                        "<div class='sched-memorial'>"
+                        "In loving memory of John Virgo (1946–2026) - Big Break’s trick-shot magician, "
+                        "snooker champion, and a wonderful friend. As a bit of fun for today's session: "
+                        "try one \"tirck shot” you wouldn’t normally attempt - drop, lob, wall-shot, "
+                        "a touch of spin smash."
+                        "</div>"
+                    ),
+                    first_page_footer_html="",
+                )
 
                 full_html = f"""
                 <!DOCTYPE html><html lang="en"><head><meta charset="UTF-8">
@@ -975,11 +1020,15 @@ def main():
                     th,td{{padding:6px;border:1px solid #ddd;text-align:left;}}
                     th{{background:#f2f2f2;font-size:1.1em;}}
                     tr:nth-child(even){{background:#f9f9f9;}}
+                    .page{{display:flex;flex-direction:column;min-height:calc(100vh - 40px);}}
+                    .page-content{{flex:1 1 auto;}}
+                    .sched-title{{text-align:center;margin:0 0 4px 0;font-size:1.7em;}}
+                    .sched-date{{text-align:center;margin:0 0 6px 0;font-size:1.15em;font-weight:600;}}
+                    .sched-memorial{{text-align:center;margin:0 0 10px 0;font-size:0.92em;line-height:1.25;color:#222;}}
+                    @media print{{.page{{min-height:100vh;}}}}
                     .downstairs-badge{{background:#222;color:#fff;border-radius:6px;padding:2px 6px;font-size:.8em;-webkit-print-color-adjust:exact;print-color-adjust:exact;}}
                     @media print{{body{{margin:0;padding:0;}} .downstairs-badge{{-webkit-print-color-adjust:exact;print-color-adjust:exact;background:#000;color:#fff;}}}}
                 </style></head><body><div class='container'>
-                <h1 style='text-align:center;'>Mijas Padellers Match Schedule</h1>
-                <h2 style='text-align:center;'>{date_str}</h2>
                 {sched_html}
                 </div></body></html>"""
 
