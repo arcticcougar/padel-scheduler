@@ -1119,6 +1119,89 @@ def main():
         samples = st.number_input("🔍 Random combinations to try (count)", 1, value=default_samples, step=50_000)
         st.caption(f"Approx. unique combinations: {int(max_unique):,}")
 
+        st.markdown("---")
+        scott_testing = st.checkbox(
+            "Scott's schedule testing",
+            value=False,
+            help="Quickly preselect a typical test setup (players + courts) to save time while testing.",
+            key="scott_schedule_testing_enabled",
+        )
+        if scott_testing:
+            preset_options = [
+                "18 random regulars + Courts 7–10",
+                "16 random regulars + Courts 7–10",
+                "18 random regulars + Courts 7–11",
+                "Reset selections",
+            ]
+            preset_choice = render_single_choice_checkbox_grid(
+                title="Testing preset (pick one)",
+                options=preset_options,
+                selected_key="scott_schedule_testing_preset",
+                key_prefix="scott_test",
+                cols=4,
+            )
+
+            def _apply_scott_testing_preset(choice: str | None) -> None:
+                import random as _random
+
+                # Clear all regular-player checkboxes + orders
+                if "player_selection_order" not in st.session_state:
+                    st.session_state["player_selection_order"] = {}
+                for idx, p in enumerate(REGULAR_PLAYERS):
+                    st.session_state[f"p_sel_{p['name']}{idx}"] = False
+                    st.session_state["player_selection_order"][p["name"]] = None
+
+                # Clear guest inputs (so tests are consistent)
+                for gi in range(8):
+                    st.session_state[f"g_nm_{gi}"] = ""
+                    st.session_state[f"g_gen_{gi}"] = "F"
+                    st.session_state[f"g_sk_{gi}"] = 5
+
+                # Clear custom courts
+                for i in range(4):
+                    st.session_state[f"cust_{i}"] = ""
+
+                # Clear court checkboxes
+                for i in range(16):
+                    st.session_state[f"court_{i}"] = False
+
+                if not choice or choice == "Reset selections":
+                    st.session_state["player_counter"] = 1
+                    return
+
+                # Parse preset
+                n_players = 18
+                court_nums = [7, 8, 9, 10]
+                if choice.startswith("16 "):
+                    n_players = 16
+                if choice.endswith("7–11"):
+                    court_nums = [7, 8, 9, 10, 11]
+
+                n_players = max(0, min(n_players, len(REGULAR_PLAYERS)))
+                picked_idx = _random.sample(range(len(REGULAR_PLAYERS)), n_players)
+
+                st.session_state["player_counter"] = 1
+                for idx in picked_idx:
+                    p = REGULAR_PLAYERS[idx]["name"]
+                    st.session_state[f"p_sel_{p}{idx}"] = True
+                    st.session_state["player_selection_order"][p] = st.session_state["player_counter"]
+                    st.session_state["player_counter"] += 1
+
+                for cn in court_nums:
+                    ci = cn - 1
+                    if 0 <= ci < 16:
+                        st.session_state[f"court_{ci}"] = True
+
+            c_apply, c_reroll = st.columns([1, 1])
+            with c_apply:
+                if st.button("Apply preset", use_container_width=True):
+                    _apply_scott_testing_preset(preset_choice)
+                    st.rerun()
+            with c_reroll:
+                if st.button("Re-roll players", use_container_width=True):
+                    _apply_scott_testing_preset(preset_choice)
+                    st.rerun()
+
     # ------------- generate button -----------------------
     if st.button("📅 Generate Schedule(s)"):
         if n_sel < 4:
