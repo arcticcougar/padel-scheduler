@@ -799,6 +799,67 @@ def main():
                 st.markdown("&nbsp;", unsafe_allow_html=True)
 
 
+    # ---- apply queued Scott testing preset (before widgets) ----
+    # We MUST apply this before creating the player/court widgets, otherwise Streamlit
+    # will throw when we try to programmatically change widget-backed session_state.
+    if st.session_state.get("scott_schedule_testing_request"):
+        req = st.session_state.get("scott_schedule_testing_request") or {}
+        preset = req.get("preset")
+        seed = int(req.get("seed") or 0)
+        rng = random.Random(seed)
+
+        # Ensure maps exist
+        if "player_selection_order" not in st.session_state:
+            st.session_state["player_selection_order"] = {}
+
+        # Clear all regular-player checkboxes + orders
+        for idx, p in enumerate(REGULAR_PLAYERS):
+            st.session_state[f"p_sel_{p['name']}{idx}"] = False
+            st.session_state["player_selection_order"][p["name"]] = None
+
+        # Clear guest inputs (so tests are consistent)
+        for gi in range(8):
+            st.session_state[f"g_nm_{gi}"] = ""
+            st.session_state[f"g_gen_{gi}"] = "F"
+            st.session_state[f"g_sk_{gi}"] = 5
+
+        # Clear custom courts
+        for i in range(4):
+            st.session_state[f"cust_{i}"] = ""
+
+        # Clear court checkboxes
+        for i in range(16):
+            st.session_state[f"court_{i}"] = False
+
+        # Apply preset selection (or just reset)
+        if preset and preset != "Reset selections":
+            n_players = 18
+            court_nums = [7, 8, 9, 10]
+            if str(preset).startswith("16 "):
+                n_players = 16
+            if str(preset).endswith("7–11"):
+                court_nums = [7, 8, 9, 10, 11]
+
+            n_players = max(0, min(int(n_players), len(REGULAR_PLAYERS)))
+            picked_idx = rng.sample(range(len(REGULAR_PLAYERS)), n_players)
+
+            st.session_state["player_counter"] = 1
+            for idx in picked_idx:
+                nm = REGULAR_PLAYERS[idx]["name"]
+                st.session_state[f"p_sel_{nm}{idx}"] = True
+                st.session_state["player_selection_order"][nm] = st.session_state["player_counter"]
+                st.session_state["player_counter"] += 1
+
+            for cn in court_nums:
+                ci = int(cn) - 1
+                if 0 <= ci < 16:
+                    st.session_state[f"court_{ci}"] = True
+        else:
+            st.session_state["player_counter"] = 1
+
+        # Clear request so it only applies once
+        st.session_state["scott_schedule_testing_request"] = None
+
     # ------------ player selection ------------------------
     per_col = math.ceil(len(REGULAR_PLAYERS) / 4)
     cols_p  = st.columns(4)
@@ -1144,64 +1205,19 @@ def main():
                 cols=4,
             )
 
-            def _apply_scott_testing_preset_callback(*, reroll: bool = False) -> None:
-                import random as _random
-                choice = st.session_state.get("scott_schedule_testing_preset")
-
-                # Clear all regular-player checkboxes + orders
-                if "player_selection_order" not in st.session_state:
-                    st.session_state["player_selection_order"] = {}
-                for idx, p in enumerate(REGULAR_PLAYERS):
-                    st.session_state[f"p_sel_{p['name']}{idx}"] = False
-                    st.session_state["player_selection_order"][p["name"]] = None
-
-                # Clear guest inputs (so tests are consistent)
-                for gi in range(8):
-                    st.session_state[f"g_nm_{gi}"] = ""
-                    st.session_state[f"g_gen_{gi}"] = "F"
-                    st.session_state[f"g_sk_{gi}"] = 5
-
-                # Clear custom courts
-                for i in range(4):
-                    st.session_state[f"cust_{i}"] = ""
-
-                # Clear court checkboxes
-                for i in range(16):
-                    st.session_state[f"court_{i}"] = False
-
-                if not choice or choice == "Reset selections":
-                    st.session_state["player_counter"] = 1
-                    return
-
-                # Parse preset
-                n_players = 18
-                court_nums = [7, 8, 9, 10]
-                if choice.startswith("16 "):
-                    n_players = 16
-                if choice.endswith("7–11"):
-                    court_nums = [7, 8, 9, 10, 11]
-
-                n_players = max(0, min(n_players, len(REGULAR_PLAYERS)))
-                picked_idx = _random.sample(range(len(REGULAR_PLAYERS)), n_players)
-
-                st.session_state["player_counter"] = 1
-                for idx in picked_idx:
-                    p = REGULAR_PLAYERS[idx]["name"]
-                    st.session_state[f"p_sel_{p}{idx}"] = True
-                    st.session_state["player_selection_order"][p] = st.session_state["player_counter"]
-                    st.session_state["player_counter"] += 1
-
-                for cn in court_nums:
-                    ci = cn - 1
-                    if 0 <= ci < 16:
-                        st.session_state[f"court_{ci}"] = True
+            def _queue_scott_testing_request(*, reroll: bool = False) -> None:
+                # Queue a request and let Streamlit rerun. The actual widget state
+                # updates will be applied BEFORE widgets are created on the next run.
+                preset = st.session_state.get("scott_schedule_testing_preset") or preset_options[0]
+                seed = random.randint(1, 1_000_000_000) if reroll else random.randint(1, 1_000_000_000)
+                st.session_state["scott_schedule_testing_request"] = {"preset": preset, "seed": seed}
 
             c_apply, c_reroll = st.columns([1, 1])
             with c_apply:
                 st.button(
                     "Apply preset",
                     use_container_width=True,
-                    on_click=_apply_scott_testing_preset_callback,
+                    on_click=_queue_scott_testing_request,
                     kwargs={"reroll": False},
                     key="scott_apply_preset_btn",
                 )
@@ -1209,7 +1225,7 @@ def main():
                 st.button(
                     "Re-roll players",
                     use_container_width=True,
-                    on_click=_apply_scott_testing_preset_callback,
+                    on_click=_queue_scott_testing_request,
                     kwargs={"reroll": True},
                     key="scott_reroll_players_btn",
                 )
