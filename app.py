@@ -1100,70 +1100,92 @@ def main():
             cols=4,
         )
 
-        focus_msg = {
+        # Editable schedule header text with a hard character limit (tweet-style).
+        # Keep this reasonably short so printing stays stable.
+        FOCUS_MAX_CHARS = 280
+
+        default_focus_text = {
             "Racket up": (
-                "Today's trick-shot focus is: <b>Racket up</b> — set early and stay ready between shots. "
-                "Keep the racket in front of you. You’ll react faster and mishit less."
+                "Today's trick-shot focus is: Racket up. "
+                "Set early and stay ready between shots. Keep the racket in front of you."
             ),
             "Split-step": (
-                "Today's trick-shot focus is: <b>Split-step</b> — do a tiny hop as they hit the ball. "
-                "Land balanced, then move. It helps your first step a lot."
+                "Today's trick-shot focus is: Split-step. "
+                "Do a tiny hop as they hit the ball, land balanced, then move."
             ),
             "Cross-court": (
-                "Today's trick-shot focus is: <b>Cross-court</b> — aim cross-court most of the time. "
-                "It’s the biggest target and the safest height over the net. Fewer unforced errors."
+                "Today's trick-shot focus is: Cross-court. "
+                "Aim cross-court most of the time—bigger target and higher margin."
             ),
             "Safe middle": (
-                "Today's trick-shot focus is: <b>Safe middle</b> — when you’re under pressure, play safely through the middle. "
-                "It reduces angles and confusion. Reset the point, then attack."
+                "Today's trick-shot focus is: Safe middle. "
+                "When under pressure, play safely through the middle to reset the point."
             ),
             "Mine / yours": (
-                "Today's trick-shot focus is: <b>Mine / yours</b> — call early and commit. "
-                "Loud and simple: “mine” or “yours”. It stops hesitation and collisions."
+                "Today's trick-shot focus is: Mine / yours. "
+                "Call early and commit—loud and simple: mine or yours."
             ),
             "Middle balls": (
-                "Today's trick-shot focus is: <b>Middle balls</b> — agree now who takes balls down the middle. "
-                "Decide a rule (forehand takes it, or one player always). Then trust it."
+                "Today's trick-shot focus is: Middle balls. "
+                "Agree now who takes balls down the middle (e.g. forehand takes it), then trust it."
             ),
             "Net together": (
-                "Today's trick-shot focus is: <b>Net together</b> — move forward as a pair. "
-                "Don’t leave one player stuck back alone. Win the net, win the point."
+                "Today's trick-shot focus is: Net together. "
+                "Move forward as a pair—don’t leave one player back alone."
             ),
             "Mix it up": (
-                "Today's trick-shot focus is: <b>Mix it up</b> — change pace and direction on purpose. "
-                "One rally ball, then a softer one. Keep them guessing, keep them moving."
+                "Today's trick-shot focus is: Mix it up. "
+                "Change pace and direction on purpose—one rally ball, then a softer one."
             ),
             "Drop shot": (
-                "Today's trick-shot focus is: <b>Drop shot</b> — soften the hands and keep it low. "
-                "Aim short and make them run. Only try it when you’re balanced."
+                "Today's trick-shot focus is: Drop shot. "
+                "Soften the hands and keep it low. Try it only when you’re balanced."
             ),
             "Lob": (
-                "Today's trick-shot focus is: <b>Lob</b> — go high and deep when you’re under pressure. "
-                "Buy time and take the net away. Depth matters more than power."
+                "Today's trick-shot focus is: Lob. "
+                "When under pressure, go high and deep to buy time and take the net away."
             ),
             "Wall-shot": (
-                "Today's trick-shot focus is: <b>Wall-shot</b> — if it’s going past you, let it bounce. "
-                "Wait, then play it after the wall. Smooth swing, control first."
+                "Today's trick-shot focus is: Wall-shot. "
+                "If it’s going past you, let it bounce. Wait, then play it after the wall."
             ),
             "Smash": (
-                "Today's trick-shot focus is: <b>Smash</b> — choose the right one: placement over power. "
-                "If it’s not “on”, don’t force it. Make it safe and make it count."
+                "Today's trick-shot focus is: Smash. "
+                "Choose the right one—placement over power. If it’s not on, don’t force it."
             ),
             "Slice": (
-                "Today's trick-shot focus is: <b>Slice</b> — a gentle cut under the ball for control. "
-                "Short swing, firm wrist. Aim low and make it awkward."
+                "Today's trick-shot focus is: Slice. "
+                "A gentle cut under the ball for control—short swing, firm wrist, keep it low."
             ),
             "Topspin": (
-                "Today's trick-shot focus is: <b>Topspin</b> — brush up the back of the ball. "
-                "It helps the ball dip in and land deeper. Start slow and feel the spin first."
+                "Today's trick-shot focus is: Topspin. "
+                "Brush up the back of the ball to help it dip in and land deeper."
             ),
             "Side-spin": (
-                "Today's trick-shot focus is: <b>Side-spin</b> — add a little around-the-ball curve. "
-                "Don’t overdo it—keep it controlled. Use it occasionally to change the look."
+                "Today's trick-shot focus is: Side-spin. "
+                "Add a little curve around the ball—keep it controlled and use it occasionally."
             ),
-        }.get(focus_choice or "", "")
-        if focus_msg:
-            trickshot_focus_html = f"<div class='sched-focus'>{focus_msg}</div>"
+        }
+
+        if focus_choice:
+            txt_key = f"trickshot_custom_text_{_slug_key(focus_choice)}"
+            if txt_key not in st.session_state:
+                st.session_state[txt_key] = default_focus_text.get(focus_choice, "")
+
+            edited = st.text_area(
+                "Schedule header text (editable)",
+                key=txt_key,
+                max_chars=FOCUS_MAX_CHARS,
+                height=110,
+                help=f"Max {FOCUS_MAX_CHARS} characters to keep printing stable.",
+            )
+            remaining = max(0, FOCUS_MAX_CHARS - len(edited or ""))
+            st.caption(f"{remaining} characters remaining.")
+
+            safe = _html.escape((edited or "").strip())
+            safe = safe.replace("\r\n", "\n").replace("\r", "\n").replace("\n", "<br>")
+            if safe:
+                trickshot_focus_html = f"<div class='sched-focus'>{safe}</div>"
     # Show downstairs rotation only if courts 12/13 are selected
     has_downstairs = any(c.endswith("12") or c == "Court 12" or c == "12" for c in courts) or \
                      any(c.endswith("13") or c == "Court 13" or c == "13" for c in courts)
