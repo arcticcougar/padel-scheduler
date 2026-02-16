@@ -1104,66 +1104,67 @@ def main():
         # Editable schedule header text with a hard character limit (tweet-style).
         # Keep this reasonably short so printing stays stable.
         FOCUS_MAX_CHARS = 280
+        SCHEDULE_FOCUS_PREFIX = "Today's skill focus is:"
 
         default_focus_text = {
             "Racket up": (
-                "Today's trick-shot focus is: Racket up. "
+                f"{SCHEDULE_FOCUS_PREFIX} Racket up. "
                 "Set early and stay ready between shots. Keep the racket in front of you."
             ),
             "Split-step": (
-                "Today's trick-shot focus is: Split-step. "
+                f"{SCHEDULE_FOCUS_PREFIX} Split-step. "
                 "Do a tiny hop as your opponent hits the ball. Land balanced, then move."
             ),
             "Cross-court": (
-                "Today's trick-shot focus is: Cross-court. "
+                f"{SCHEDULE_FOCUS_PREFIX} Cross-court. "
                 "Aim cross-court most of the time—bigger target and higher margin."
             ),
             "Safe middle": (
-                "Today's trick-shot focus is: Safe middle. "
+                f"{SCHEDULE_FOCUS_PREFIX} Safe middle. "
                 "When under pressure, play safely through the middle to reset the point."
             ),
             "Mine / yours": (
-                "Today's trick-shot focus is: Mine / yours. "
+                f"{SCHEDULE_FOCUS_PREFIX} Mine / yours. "
                 "Call early and commit—loud and simple: mine or yours."
             ),
             "Middle balls": (
-                "Today's trick-shot focus is: Middle balls. "
+                f"{SCHEDULE_FOCUS_PREFIX} Middle balls. "
                 "Agree now who takes balls down the middle (e.g. forehand takes it), then trust it."
             ),
             "Net together": (
-                "Today's trick-shot focus is: Net together. "
+                f"{SCHEDULE_FOCUS_PREFIX} Net together. "
                 "Move forward as a pair—don’t leave one player back alone."
             ),
             "Mix it up": (
-                "Today's trick-shot focus is: Mix it up. "
+                f"{SCHEDULE_FOCUS_PREFIX} Mix it up. "
                 "Change pace and direction on purpose—one rally ball, then a softer one."
             ),
             "Drop shot": (
-                "Today's trick-shot focus is: Drop shot. "
+                f"{SCHEDULE_FOCUS_PREFIX} Drop shot. "
                 "Soften the hands and keep it low. Try it only when you’re balanced."
             ),
             "Lob": (
-                "Today's trick-shot focus is: Lob. "
+                f"{SCHEDULE_FOCUS_PREFIX} Lob. "
                 "When under pressure, go high and deep to buy time and take the net away."
             ),
             "Wall-shot": (
-                "Today's trick-shot focus is: Wall-shot. "
+                f"{SCHEDULE_FOCUS_PREFIX} Wall-shot. "
                 "If it’s going past you, let it bounce. Wait, then play it after the wall."
             ),
             "Smash": (
-                "Today's trick-shot focus is: Smash. "
+                f"{SCHEDULE_FOCUS_PREFIX} Smash. "
                 "Choose the right one—placement over power. If it’s not on, don’t force it."
             ),
             "Slice": (
-                "Today's trick-shot focus is: Slice. "
+                f"{SCHEDULE_FOCUS_PREFIX} Slice. "
                 "A gentle cut under the ball for control—short swing, firm wrist, keep it low."
             ),
             "Topspin": (
-                "Today's trick-shot focus is: Topspin. "
+                f"{SCHEDULE_FOCUS_PREFIX} Topspin. "
                 "Brush up the back of the ball to help it dip in and land deeper."
             ),
             "Side-spin": (
-                "Today's trick-shot focus is: Side-spin. "
+                f"{SCHEDULE_FOCUS_PREFIX} Side-spin. "
                 "Add a little curve around the ball—keep it controlled and use it occasionally."
             ),
         }
@@ -1174,7 +1175,7 @@ def main():
                 txt_key = "trickshot_custom_text_custom"
                 if txt_key not in st.session_state:
                     st.session_state[txt_key] = (
-                        "Today's trick-shot focus is: XXXXX. "
+                        f"{SCHEDULE_FOCUS_PREFIX} XXXXX. "
                         "Write your custom instructions here."
                     )
 
@@ -1188,10 +1189,28 @@ def main():
                 remaining = max(0, FOCUS_MAX_CHARS - len(edited or ""))
                 st.caption(f"{remaining} characters remaining.")
 
-                safe = _html.escape((edited or "").strip())
-                safe = safe.replace("\r\n", "\n").replace("\r", "\n").replace("\n", "<br>")
-                if safe:
-                    trickshot_focus_html = f"<div class='sched-focus'>{safe}</div>"
+                raw = (edited or "").strip()
+                # Normalize older wording to avoid "trick-shot" on the schedule
+                raw = raw.replace("Today's trick-shot focus is:", SCHEDULE_FOCUS_PREFIX)
+                raw = raw.replace("Today's trickshot focus is:", SCHEDULE_FOCUS_PREFIX)
+                raw = raw.replace("\r\n", "\n").replace("\r", "\n")
+                head = raw.strip()
+                body = ""
+                if "." in head:
+                    h, b = head.split(".", 1)
+                    head = h.strip() + "."
+                    body = b.strip()
+
+                head_html = _html.escape(head)
+                body_html = _html.escape(body).replace("\n", "<br>") if body else ""
+                if head_html:
+                    body_div = f"<div class='sched-focus-body'>{body_html}</div>" if body_html else ""
+                    trickshot_focus_html = (
+                        "<div class='sched-focus'><div class='sched-focus-inner'>"
+                        f"<div class='sched-focus-head'>{head_html}</div>"
+                        f"{body_div}"
+                        "</div></div>"
+                    )
             else:
                 txt_key = f"trickshot_custom_text_{_slug_key(focus_choice)}"
                 if txt_key not in st.session_state:
@@ -1207,10 +1226,27 @@ def main():
                 remaining = max(0, FOCUS_MAX_CHARS - len(edited or ""))
                 st.caption(f"{remaining} characters remaining.")
 
-                safe = _html.escape((edited or "").strip())
-                safe = safe.replace("\r\n", "\n").replace("\r", "\n").replace("\n", "<br>")
-                if safe:
-                    trickshot_focus_html = f"<div class='sched-focus'>{safe}</div>"
+                raw = (edited or "").strip()
+                raw = raw.replace("Today's trick-shot focus is:", SCHEDULE_FOCUS_PREFIX)
+                raw = raw.replace("Today's trickshot focus is:", SCHEDULE_FOCUS_PREFIX)
+                raw = raw.replace("\r\n", "\n").replace("\r", "\n")
+                head = raw.strip()
+                body = ""
+                if "." in head:
+                    h, b = head.split(".", 1)
+                    head = h.strip() + "."
+                    body = b.strip()
+
+                head_html = _html.escape(head)
+                body_html = _html.escape(body).replace("\n", "<br>") if body else ""
+                if head_html:
+                    body_div = f"<div class='sched-focus-body'>{body_html}</div>" if body_html else ""
+                    trickshot_focus_html = (
+                        "<div class='sched-focus'><div class='sched-focus-inner'>"
+                        f"<div class='sched-focus-head'>{head_html}</div>"
+                        f"{body_div}"
+                        "</div></div>"
+                    )
     # Show downstairs rotation only if courts 12/13 are selected
     has_downstairs = any(c.endswith("12") or c == "Court 12" or c == "12" for c in courts) or \
                      any(c.endswith("13") or c == "Court 13" or c == "13" for c in courts)
@@ -1319,7 +1355,11 @@ def main():
                     tr:nth-child(even){{background:#f9f9f9;}}
                     .sched-title{{text-align:center;margin:0 0 4px 0;font-size:1.7em;}}
                     .sched-date{{text-align:center;margin:0 0 6px 0;font-size:1.15em;font-weight:600;}}
-                    .sched-focus{{text-align:center;margin:0 auto 10px auto;font-size:0.92em;line-height:1.25;color:#222;padding:0 28px;box-sizing:border-box;max-width:980px;}}
+                    .sched-focus{{margin:0 auto 12px auto;max-width:980px;padding:0 28px;box-sizing:border-box;}}
+                    .sched-focus-inner{{background:#eef6ff;border:1px solid #cce0ff;border-radius:10px;padding:10px 12px;text-align:left;line-height:1.25;color:#111;}}
+                    .sched-focus-inner{{-webkit-print-color-adjust:exact;print-color-adjust:exact;}}
+                    .sched-focus-head{{font-weight:800;font-size:1.05em;margin:0 0 4px 0;}}
+                    .sched-focus-body{{margin:0;color:#222;}}
                     .downstairs-badge{{background:#222;color:#fff;border-radius:6px;padding:2px 6px;font-size:.8em;-webkit-print-color-adjust:exact;print-color-adjust:exact;}}
                     @media print{{body{{margin:0;padding:0;}} .downstairs-badge{{-webkit-print-color-adjust:exact;print-color-adjust:exact;background:#000;color:#fff;}}}}
                 </style></head><body><div class='container'>
