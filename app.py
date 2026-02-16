@@ -481,6 +481,7 @@ def assign_matches(names, genders, skills, courts, court_sz=4, total_matches=6,
                    start_dt: datetime | None = None,
                    match_offset: int = 0,
                    header_html: str = "",
+                   repeat_header_html: str = "",
                    first_page_footer_html: str = ""):
     n_players   = len(names)
     courts_used = determine_courts_to_use(n_players, len(courts), court_sz)
@@ -585,6 +586,8 @@ def assign_matches(names, genders, skills, courts, court_sz=4, total_matches=6,
         for idx, (groups, bench) in enumerate(all_matches):
             if idx and idx % matches_per_page == 0:
                 html_blocks.append("<div style='page-break-after: always;'></div>")
+                if repeat_header_html:
+                    html_blocks.append(repeat_header_html)
             # Compute block label from match index
             bidx = idx // 2
             # When downstairs rotation is enabled, don't show block tag in downloadable HTML
@@ -658,6 +661,8 @@ def assign_matches(names, genders, skills, courts, court_sz=4, total_matches=6,
     for idx, (groups, bench) in enumerate(all_matches):
         if idx and idx % matches_per_page == 0:
             html_blocks.append("<div style='page-break-after: always;'></div>")
+            if repeat_header_html:
+                html_blocks.append(repeat_header_html)
         slot_start = base_dt + timedelta(minutes=15 * idx)
         slot_end = slot_start + timedelta(minutes=15)
         time_label = f"{slot_start.strftime('%H:%M')}-{slot_end.strftime('%H:%M')}"
@@ -1341,6 +1346,7 @@ def main():
                         f"<h2 class='sched-date'>{date_str}</h2>"
                         + trickshot_focus_html
                     ),
+                    repeat_header_html=(trickshot_focus_html or ""),
                     first_page_footer_html="",
                 )
 
@@ -1356,7 +1362,7 @@ def main():
                     .sched-title{{text-align:center;margin:0 0 4px 0;font-size:1.7em;}}
                     .sched-date{{text-align:center;margin:0 0 6px 0;font-size:1.15em;font-weight:600;}}
                     .sched-focus{{margin:0 auto 12px auto;max-width:980px;padding:0 28px;box-sizing:border-box;}}
-                    .sched-focus-inner{{background:#eef6ff;border:1px solid #cce0ff;border-radius:10px;padding:10px 12px;text-align:left;line-height:1.25;color:#111;}}
+                    .sched-focus-inner{{background:#eef6ff;border:1px solid #cce0ff;border-radius:10px;padding:10px 12px;text-align:center;line-height:1.25;color:#111;}}
                     .sched-focus-inner{{-webkit-print-color-adjust:exact;print-color-adjust:exact;}}
                     .sched-focus-head{{font-weight:800;font-size:1.05em;margin:0 0 4px 0;}}
                     .sched-focus-body{{margin:0;color:#222;}}
