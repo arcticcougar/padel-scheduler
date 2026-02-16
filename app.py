@@ -953,29 +953,154 @@ def main():
         value=False,
         help="When enabled, pick a single focus for today; it will appear under the date in the downloaded schedule.",
     )
+
+    def _slug_key(s: str) -> str:
+        out = []
+        for ch in s.lower():
+            if ch.isalnum():
+                out.append(ch)
+            else:
+                out.append("_")
+        return "".join(out).strip("_")
+
+    def render_single_choice_checkbox_grid(
+        *,
+        title: str,
+        options: list[str],
+        selected_key: str,
+        key_prefix: str,
+        cols: int = 4,
+    ) -> str | None:
+        """Render options as a 4-across checkbox grid, but enforce single choice.
+
+        Returns the selected option (or None).
+        """
+        if selected_key not in st.session_state:
+            st.session_state[selected_key] = None
+
+        selected: str | None = st.session_state.get(selected_key)
+        st.markdown(f"**{title}**")
+        col_objs = st.columns(cols)
+        all_keys = [f"{key_prefix}_{_slug_key(opt)}" for opt in options]
+
+        def _on_change(opt: str, ck: str):
+            if st.session_state.get(ck, False):
+                st.session_state[selected_key] = opt
+                # Uncheck all other boxes
+                for other in all_keys:
+                    if other != ck:
+                        st.session_state[other] = False
+            else:
+                # If the selected option was unchecked, clear selection
+                if st.session_state.get(selected_key) == opt:
+                    st.session_state[selected_key] = None
+
+        for i, opt in enumerate(options):
+            ck = f"{key_prefix}_{_slug_key(opt)}"
+            # Keep UI synced to selection each run (after callbacks)
+            if st.session_state.get(selected_key) == opt:
+                st.session_state[ck] = True
+            elif ck not in st.session_state:
+                st.session_state[ck] = False
+            with col_objs[i % cols]:
+                st.checkbox(
+                    opt,
+                    key=ck,
+                    on_change=_on_change,
+                    kwargs={"opt": opt, "ck": ck},
+                )
+        return st.session_state.get(selected_key)
+
     trickshot_focus_html = ""
     if show_john_virgo_trickshot:
+        # Beginner-friendly + fun shots (15)
         focus_options = [
+            "Racket up",
+            "Split-step",
+            "Cross-court",
+            "Safe middle",
+            "Mine / yours",
+            "Middle balls",
+            "Net together",
+            "Mix it up",
             "Drop shot",
             "Lob",
-            "Coming to the net",
             "Wall-shot",
-            "Bandeja",
             "Smash",
+            "Slice",
+            "Topspin",
+            "Side-spin",
         ]
-        focus_choice = st.selectbox(
-            "Today's trick-shot focus",
-            focus_options,
-            index=1,  # Lob is a good default when enabled
+        focus_choice = render_single_choice_checkbox_grid(
+            title="Trick-shot focus (pick one)",
+            options=focus_options,
+            selected_key="trickshot_focus_choice",
+            key_prefix="trickshot_focus",
+            cols=4,
         )
+
         focus_msg = {
-            "Drop shot": "Today's trick-shot focus is: <b>Drop shot</b> — soften the hands and keep it low.",
-            "Lob": "Today's trick-shot focus is: <b>Lob</b> — high, deep, and buy time.",
-            "Coming to the net": "Today's trick-shot focus is: <b>Coming to the net</b> — split-step early and keep volleys compact.",
-            "Wall-shot": "Today's trick-shot focus is: <b>Wall-shot</b> — wait, bounce, and play through the ball.",
-            "Bandeja": "Today's trick-shot focus is: <b>Bandeja</b> — controlled overhead, keep position and place it.",
-            "Smash": "Today's trick-shot focus is: <b>Smash</b> — choose the right one; placement over power.",
-        }.get(focus_choice, "")
+            "Racket up": (
+                "Today's trick-shot focus is: <b>Racket up</b> — set early and stay ready between shots. "
+                "Keep the racket in front of you. You’ll react faster and mishit less."
+            ),
+            "Split-step": (
+                "Today's trick-shot focus is: <b>Split-step</b> — do a tiny hop as they hit the ball. "
+                "Land balanced, then move. It helps your first step a lot."
+            ),
+            "Cross-court": (
+                "Today's trick-shot focus is: <b>Cross-court</b> — aim cross-court most of the time. "
+                "It’s the biggest target and the safest height over the net. Fewer unforced errors."
+            ),
+            "Safe middle": (
+                "Today's trick-shot focus is: <b>Safe middle</b> — when you’re under pressure, play safely through the middle. "
+                "It reduces angles and confusion. Reset the point, then attack."
+            ),
+            "Mine / yours": (
+                "Today's trick-shot focus is: <b>Mine / yours</b> — call early and commit. "
+                "Loud and simple: “mine” or “yours”. It stops hesitation and collisions."
+            ),
+            "Middle balls": (
+                "Today's trick-shot focus is: <b>Middle balls</b> — agree now who takes balls down the middle. "
+                "Decide a rule (forehand takes it, or one player always). Then trust it."
+            ),
+            "Net together": (
+                "Today's trick-shot focus is: <b>Net together</b> — move forward as a pair. "
+                "Don’t leave one player stuck back alone. Win the net, win the point."
+            ),
+            "Mix it up": (
+                "Today's trick-shot focus is: <b>Mix it up</b> — change pace and direction on purpose. "
+                "One rally ball, then a softer one. Keep them guessing, keep them moving."
+            ),
+            "Drop shot": (
+                "Today's trick-shot focus is: <b>Drop shot</b> — soften the hands and keep it low. "
+                "Aim short and make them run. Only try it when you’re balanced."
+            ),
+            "Lob": (
+                "Today's trick-shot focus is: <b>Lob</b> — go high and deep when you’re under pressure. "
+                "Buy time and take the net away. Depth matters more than power."
+            ),
+            "Wall-shot": (
+                "Today's trick-shot focus is: <b>Wall-shot</b> — if it’s going past you, let it bounce. "
+                "Wait, then play it after the wall. Smooth swing, control first."
+            ),
+            "Smash": (
+                "Today's trick-shot focus is: <b>Smash</b> — choose the right one: placement over power. "
+                "If it’s not “on”, don’t force it. Make it safe and make it count."
+            ),
+            "Slice": (
+                "Today's trick-shot focus is: <b>Slice</b> — a gentle cut under the ball for control. "
+                "Short swing, firm wrist. Aim low and make it awkward."
+            ),
+            "Topspin": (
+                "Today's trick-shot focus is: <b>Topspin</b> — brush up the back of the ball. "
+                "It helps the ball dip in and land deeper. Start slow and feel the spin first."
+            ),
+            "Side-spin": (
+                "Today's trick-shot focus is: <b>Side-spin</b> — add a little around-the-ball curve. "
+                "Don’t overdo it—keep it controlled. Use it occasionally to change the look."
+            ),
+        }.get(focus_choice or "", "")
         if focus_msg:
             trickshot_focus_html = f"<div class='sched-focus'>{focus_msg}</div>"
     # Show downstairs rotation only if courts 12/13 are selected
