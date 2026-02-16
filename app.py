@@ -1114,7 +1114,7 @@ def main():
             ),
             "Split-step": (
                 "Today's trick-shot focus is: Split-step. "
-                "Do a tiny hop as they hit the ball, land balanced, then move."
+                "Do a tiny hop as your opponent hits the ball. Land balanced, then move."
             ),
             "Cross-court": (
                 "Today's trick-shot focus is: Cross-court. "
