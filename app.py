@@ -575,10 +575,16 @@ def assign_matches(names, genders, skills, courts, court_sz=4, total_matches=6,
                 all_matches.append((groups_full, to_bench_up))
                 match_counter += 1
 
-        # Build schedule HTML pages (matches grouped per printable page)
+        # Build schedule HTML with reliable page breaks (print-friendly).
+        # Keep the HTML structure simple (matches + explicit page-break divs)
+        # to avoid browser print quirks with flex/min-height wrappers.
         matches_per_page = 3 if len(courts) <= 4 else 2
-        match_blocks: list[str] = []
+        html_blocks: list[str] = []
+        if header_html:
+            html_blocks.append(header_html)
         for idx, (groups, bench) in enumerate(all_matches):
+            if idx and idx % matches_per_page == 0:
+                html_blocks.append("<div style='page-break-after: always;'></div>")
             # Compute block label from match index
             bidx = idx // 2
             # When downstairs rotation is enabled, don't show block tag in downloadable HTML
@@ -587,7 +593,7 @@ def assign_matches(names, genders, skills, courts, court_sz=4, total_matches=6,
             slot_start = base_dt + timedelta(minutes=15 * idx)
             slot_end = slot_start + timedelta(minutes=15)
             time_label = f"{slot_start.strftime('%H:%M')}-{slot_end.strftime('%H:%M')}"
-            match_blocks.append(
+            html_blocks.append(
                 format_match_table_html(
                     idx, groups, courts, names, bench,
                     block_tag=block_for_title,
@@ -597,21 +603,7 @@ def assign_matches(names, genders, skills, courts, court_sz=4, total_matches=6,
                 )
             )
 
-        pages: list[str] = []
-        for page_start in range(0, len(match_blocks), matches_per_page):
-            page_no = page_start // matches_per_page
-            chunk = "".join(match_blocks[page_start:page_start + matches_per_page])
-            top = (header_html + chunk) if page_no == 0 else chunk
-            footer = f"<div class='first-page-footer'>{first_page_footer_html}</div>" if (page_no == 0 and first_page_footer_html) else ""
-            pages.append(
-                "<div class='page' style='page-break-after: always;'>"
-                f"<div class='page-content'>{top}</div>"
-                f"{footer}"
-                "</div>"
-            )
-        if pages:
-            pages[-1] = pages[-1].replace("page-break-after: always;", "page-break-after: auto;", 1)
-        schedule_html = "".join(pages)
+        schedule_html = "".join(html_blocks)
         return schedule_html, teammate_mtx, opponent_mtx, rest_track, all_matches, courts_used
 
     # -------- default flow (no downstairs rotation) --------
@@ -657,37 +649,26 @@ def assign_matches(names, genders, skills, courts, court_sz=4, total_matches=6,
             for p in benched:
                 rest_track[p] += 1
 
-    # ------------ build schedule HTML pages (print-friendly) ----------------
+    # ------------ build schedule HTML with reliable page breaks -------------
     matches_per_page = 3 if courts_used <= 4 else 2
-    match_blocks: list[str] = []
+    html_blocks: list[str] = []
+    if header_html:
+        html_blocks.append(header_html)
     base_dt = start_dt if start_dt else datetime.combine(date.today(), time(hour=10, minute=30))
     for idx, (groups, bench) in enumerate(all_matches):
+        if idx and idx % matches_per_page == 0:
+            html_blocks.append("<div style='page-break-after: always;'></div>")
         slot_start = base_dt + timedelta(minutes=15 * idx)
         slot_end = slot_start + timedelta(minutes=15)
         time_label = f"{slot_start.strftime('%H:%M')}-{slot_end.strftime('%H:%M')}"
-        match_blocks.append(
+        html_blocks.append(
             format_match_table_html(
                 idx, groups, courts, names, bench,
                 time_label=time_label,
                 match_offset=match_offset
             )
         )
-
-    pages: list[str] = []
-    for page_start in range(0, len(match_blocks), matches_per_page):
-        page_no = page_start // matches_per_page
-        chunk = "".join(match_blocks[page_start:page_start + matches_per_page])
-        top = (header_html + chunk) if page_no == 0 else chunk
-        footer = f"<div class='first-page-footer'>{first_page_footer_html}</div>" if (page_no == 0 and first_page_footer_html) else ""
-        pages.append(
-            "<div class='page' style='page-break-after: always;'>"
-            f"<div class='page-content'>{top}</div>"
-            f"{footer}"
-            "</div>"
-        )
-    if pages:
-        pages[-1] = pages[-1].replace("page-break-after: always;", "page-break-after: auto;", 1)
-    schedule_html = "".join(pages)
+    schedule_html = "".join(html_blocks)
     # ----------------------------------------------------------------------
 
     return schedule_html, teammate_mtx, opponent_mtx, rest_track, all_matches, courts_used
@@ -964,12 +945,39 @@ def main():
         )
     else:
         same_sex_matches_count = 3
-    enable_skill   = st.checkbox("🎯 Skill-based Matches", value=True)
+    enable_skill = st.checkbox("🎯 Skill-based Matches", value=True)
+
+    # John Virgo "Trick Shot Challenge" (feature name stays, content is now a daily focus)
     show_john_virgo_trickshot = st.checkbox(
-        "John Virgo trickshot challenge",
-        value=True,
-        help="Show the John Virgo memorial trickshot challenge message under the date in the downloaded schedule.",
+        "John Virgo Trick Shot Challenge",
+        value=False,
+        help="When enabled, pick a single focus for today; it will appear under the date in the downloaded schedule.",
     )
+    trickshot_focus_html = ""
+    if show_john_virgo_trickshot:
+        focus_options = [
+            "Drop shot",
+            "Lob",
+            "Coming to the net",
+            "Wall-shot",
+            "Bandeja",
+            "Smash",
+        ]
+        focus_choice = st.selectbox(
+            "Today's trick-shot focus",
+            focus_options,
+            index=1,  # Lob is a good default when enabled
+        )
+        focus_msg = {
+            "Drop shot": "Today's trick-shot focus is: <b>Drop shot</b> — soften the hands and keep it low.",
+            "Lob": "Today's trick-shot focus is: <b>Lob</b> — high, deep, and buy time.",
+            "Coming to the net": "Today's trick-shot focus is: <b>Coming to the net</b> — split-step early and keep volleys compact.",
+            "Wall-shot": "Today's trick-shot focus is: <b>Wall-shot</b> — wait, bounce, and play through the ball.",
+            "Bandeja": "Today's trick-shot focus is: <b>Bandeja</b> — controlled overhead, keep position and place it.",
+            "Smash": "Today's trick-shot focus is: <b>Smash</b> — choose the right one; placement over power.",
+        }.get(focus_choice, "")
+        if focus_msg:
+            trickshot_focus_html = f"<div class='sched-focus'>{focus_msg}</div>"
     # Show downstairs rotation only if courts 12/13 are selected
     has_downstairs = any(c.endswith("12") or c == "Court 12" or c == "12" for c in courts) or \
                      any(c.endswith("13") or c == "Court 13" or c == "13" for c in courts)
@@ -1012,16 +1020,7 @@ def main():
                     header_html=(
                         "<h1 class='sched-title'>Mijas Padellers Match Schedule</h1>"
                         f"<h2 class='sched-date'>{date_str}</h2>"
-                        + (
-                            "<div class='sched-memorial'>"
-                            "In loving memory of John Virgo (1946–2026) - Big Break’s trick-shot magician, "
-                            "snooker champion, and a wonderful friend. As a challenge for today's session: "
-                            "try and perfect one \"trick-shot\" you wouldn’t normally attempt - drop shot, "
-                            "lob, wall-shot, a bit of spin or a smash -- have fun."
-                            "</div>"
-                            if show_john_virgo_trickshot
-                            else ""
-                        )
+                        + trickshot_focus_html
                     ),
                     first_page_footer_html="",
                 )
@@ -1035,12 +1034,9 @@ def main():
                     th,td{{padding:6px;border:1px solid #ddd;text-align:left;}}
                     th{{background:#f2f2f2;font-size:1.1em;}}
                     tr:nth-child(even){{background:#f9f9f9;}}
-                    .page{{display:flex;flex-direction:column;min-height:calc(100vh - 40px);}}
-                    .page-content{{flex:1 1 auto;}}
                     .sched-title{{text-align:center;margin:0 0 4px 0;font-size:1.7em;}}
                     .sched-date{{text-align:center;margin:0 0 6px 0;font-size:1.15em;font-weight:600;}}
-                    .sched-memorial{{text-align:center;margin:0 auto 10px auto;font-size:0.92em;line-height:1.25;color:#222;padding:0 28px;box-sizing:border-box;max-width:980px;}}
-                    @media print{{.page{{min-height:100vh;}}}}
+                    .sched-focus{{text-align:center;margin:0 auto 10px auto;font-size:0.92em;line-height:1.25;color:#222;padding:0 28px;box-sizing:border-box;max-width:980px;}}
                     .downstairs-badge{{background:#222;color:#fff;border-radius:6px;padding:2px 6px;font-size:.8em;-webkit-print-color-adjust:exact;print-color-adjust:exact;}}
                     @media print{{body{{margin:0;padding:0;}} .downstairs-badge{{-webkit-print-color-adjust:exact;print-color-adjust:exact;background:#000;color:#fff;}}}}
                 </style></head><body><div class='container'>
