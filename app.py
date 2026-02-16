@@ -1133,6 +1133,9 @@ def main():
                 "18 random regulars + Courts 7–11",
                 "Reset selections",
             ]
+            # Default preset (only used until you pick one)
+            if "scott_schedule_testing_preset" not in st.session_state:
+                st.session_state["scott_schedule_testing_preset"] = preset_options[0]
             preset_choice = render_single_choice_checkbox_grid(
                 title="Testing preset (pick one)",
                 options=preset_options,
@@ -1141,8 +1144,9 @@ def main():
                 cols=4,
             )
 
-            def _apply_scott_testing_preset(choice: str | None) -> None:
+            def _apply_scott_testing_preset_callback(*, reroll: bool = False) -> None:
                 import random as _random
+                choice = st.session_state.get("scott_schedule_testing_preset")
 
                 # Clear all regular-player checkboxes + orders
                 if "player_selection_order" not in st.session_state:
@@ -1194,13 +1198,21 @@ def main():
 
             c_apply, c_reroll = st.columns([1, 1])
             with c_apply:
-                if st.button("Apply preset", use_container_width=True):
-                    _apply_scott_testing_preset(preset_choice)
-                    st.rerun()
+                st.button(
+                    "Apply preset",
+                    use_container_width=True,
+                    on_click=_apply_scott_testing_preset_callback,
+                    kwargs={"reroll": False},
+                    key="scott_apply_preset_btn",
+                )
             with c_reroll:
-                if st.button("Re-roll players", use_container_width=True):
-                    _apply_scott_testing_preset(preset_choice)
-                    st.rerun()
+                st.button(
+                    "Re-roll players",
+                    use_container_width=True,
+                    on_click=_apply_scott_testing_preset_callback,
+                    kwargs={"reroll": True},
+                    key="scott_reroll_players_btn",
+                )
 
     # ------------- generate button -----------------------
     if st.button("📅 Generate Schedule(s)"):
