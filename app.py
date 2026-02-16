@@ -1074,8 +1074,9 @@ def main():
 
     trickshot_focus_html = ""
     if show_john_virgo_trickshot:
-        # Beginner-friendly + fun shots (15)
+        # Beginner-friendly + fun shots (+ Custom) (16 total to fit 4x4 grid)
         focus_options = [
+            "Custom",
             "Racket up",
             "Split-step",
             "Cross-court",
@@ -1103,6 +1104,8 @@ def main():
         # Editable schedule header text with a hard character limit (tweet-style).
         # Keep this reasonably short so printing stays stable.
         FOCUS_MAX_CHARS = 280
+        CUSTOM_FOCUS_NAME_MAX = 24
+        CUSTOM_FOCUS_BODY_MAX = 220
 
         default_focus_text = {
             "Racket up": (
@@ -1168,24 +1171,59 @@ def main():
         }
 
         if focus_choice:
-            txt_key = f"trickshot_custom_text_{_slug_key(focus_choice)}"
-            if txt_key not in st.session_state:
-                st.session_state[txt_key] = default_focus_text.get(focus_choice, "")
+            if focus_choice == "Custom":
+                # Custom focus: let user name the focus + edit the header text.
+                # Keep the overall size short (printing stability).
+                if "trickshot_custom_focus_name" not in st.session_state:
+                    st.session_state["trickshot_custom_focus_name"] = ""
+                if "trickshot_custom_body" not in st.session_state:
+                    st.session_state["trickshot_custom_body"] = "Your custom text here."
 
-            edited = st.text_area(
-                "Schedule header text (editable)",
-                key=txt_key,
-                max_chars=FOCUS_MAX_CHARS,
-                height=110,
-                help=f"Max {FOCUS_MAX_CHARS} characters to keep printing stable.",
-            )
-            remaining = max(0, FOCUS_MAX_CHARS - len(edited or ""))
-            st.caption(f"{remaining} characters remaining.")
+                focus_name = st.text_input(
+                    "Custom focus name",
+                    key="trickshot_custom_focus_name",
+                    max_chars=CUSTOM_FOCUS_NAME_MAX,
+                    placeholder="e.g. Keep it deep",
+                ).strip()
+                body = st.text_area(
+                    "Schedule header text (editable)",
+                    key="trickshot_custom_body",
+                    max_chars=CUSTOM_FOCUS_BODY_MAX,
+                    height=110,
+                    help=f"Keep it short so printing stays stable (max {FOCUS_MAX_CHARS} overall).",
+                ).strip()
 
-            safe = _html.escape((edited or "").strip())
-            safe = safe.replace("\r\n", "\n").replace("\r", "\n").replace("\n", "<br>")
-            if safe:
-                trickshot_focus_html = f"<div class='sched-focus'>{safe}</div>"
+                title = focus_name if focus_name else "XXXXX"
+                composed = f"Today's trick-shot focus is: {title}."
+                if body:
+                    composed = composed + "\n" + body
+
+                remaining = max(0, FOCUS_MAX_CHARS - len(composed))
+                st.caption(f"{remaining} characters remaining (overall).")
+
+                safe = _html.escape(composed.strip())
+                safe = safe.replace("\r\n", "\n").replace("\r", "\n").replace("\n", "<br>")
+                if safe:
+                    trickshot_focus_html = f"<div class='sched-focus'>{safe}</div>"
+            else:
+                txt_key = f"trickshot_custom_text_{_slug_key(focus_choice)}"
+                if txt_key not in st.session_state:
+                    st.session_state[txt_key] = default_focus_text.get(focus_choice, "")
+
+                edited = st.text_area(
+                    "Schedule header text (editable)",
+                    key=txt_key,
+                    max_chars=FOCUS_MAX_CHARS,
+                    height=110,
+                    help=f"Max {FOCUS_MAX_CHARS} characters to keep printing stable.",
+                )
+                remaining = max(0, FOCUS_MAX_CHARS - len(edited or ""))
+                st.caption(f"{remaining} characters remaining.")
+
+                safe = _html.escape((edited or "").strip())
+                safe = safe.replace("\r\n", "\n").replace("\r", "\n").replace("\n", "<br>")
+                if safe:
+                    trickshot_focus_html = f"<div class='sched-focus'>{safe}</div>"
     # Show downstairs rotation only if courts 12/13 are selected
     has_downstairs = any(c.endswith("12") or c == "Court 12" or c == "12" for c in courts) or \
                      any(c.endswith("13") or c == "Court 13" or c == "13" for c in courts)
