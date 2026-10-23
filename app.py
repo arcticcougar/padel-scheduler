@@ -1,6 +1,6 @@
 ###############################################################################
 #  Mijas Padellers Match Scheduler – Streamlit application                    #
-#  Last updated: 29 Apr 2025 – Guest-player order now preserved               #
+#  Last updated: 23 Oct 2026 – Downstairs courts integrated automatically    #
 ###############################################################################
 import streamlit as st
 import itertools
@@ -55,7 +55,7 @@ def canonical_config(group):
 # --------------------------------------------------------------------------- #
 def evaluate_match(groups, teammate_mtx, opponent_mtx, reject_mixed, genders,
                    available, court_size, enable_skill, skills, skill_wt,
-                   history=None, forced_pair=None):
+                   history=None):
     score = 0
     for g in groups:
         t1, t2 = g[:2], g[2:]
@@ -83,27 +83,17 @@ def evaluate_match(groups, teammate_mtx, opponent_mtx, reject_mixed, genders,
             if canonical_config(g) in history:
                 score += 10000
 
-    if forced_pair:
-        a_idx, o_idx = forced_pair
-        found_same_side = False
-        for g in groups:
-            if a_idx in g and o_idx in g:
-                idx_a = g.index(a_idx); idx_o = g.index(o_idx)
-                if (idx_a < 2) == (idx_o < 2):   # same side
-                    found_same_side = True
-                else:
-                    score += 10000
-                break
-        in_groups = {p for grp in groups for p in grp}
-        if a_idx in in_groups and o_idx in in_groups and not found_same_side:
-            score += 10000
     return score
 
 
 def find_best_match(players, n_courts, court_sz, teammate_mtx, opponent_mtx,
                     match_no, samples=100000, reject_mixed=False,
                     genders=None, enable_skill=False, skills=None, skill_wt=20,
-                    history=None, forced_pair=None, match_offset: int = 0):
+                    history=None, match_offset: int = 0):
+    if len(players) != n_courts * court_sz or len(set(players)) != len(players):
+        raise ValueError("Every active court must have four different players.")
+    if n_courts == 0:
+        return []
     best, best_score = None, float('inf')
     bar = st.progress(0); status = st.empty()
     for i in range(samples):
@@ -113,7 +103,7 @@ def find_best_match(players, n_courts, court_sz, teammate_mtx, opponent_mtx,
             continue
         s = evaluate_match(groups, teammate_mtx, opponent_mtx, reject_mixed, genders,
                            players, court_sz, enable_skill, skills, skill_wt,
-                           history, forced_pair)
+                           history)
         if s < best_score:
             best, best_score = groups, s
         if (i+1) % 1000 == 0:
@@ -229,33 +219,62 @@ def identify_downstairs_courts(court_names):
     upstairs_idx = [i for i in range(len(court_names)) if i not in downstairs_idx]
     return downstairs_idx, upstairs_idx
 
-def build_downstairs_rotation(players, blocks, d_slots, offset_first_block=True):
-    """Map each 2-match block to a set of player indices assigned downstairs.
-    Tries to give everyone exactly one block when possible; uses entry order fairness.
-    Allows ±1 size variance when needed.
-    """
-    n = len(players)
-    rotation = [set() for _ in range(blocks)]
-    if blocks <= 0 or d_slots <= 0:
-        return rotation
-    max_unique = blocks * d_slots
-    eligible = players[:]  # entry/rest-order
-    # Everyone gets one block if capacity permits, else as many as possible from the front
-    pick = eligible if n <= max_unique else eligible[:max_unique]
-    # Rest-aware tweak: avoid placing the very first rest-priority players
-    # downstairs in the first block by rotating the pick list by d_slots.
-    if offset_first_block and d_slots > 0 and len(pick) > 1:
-        rot = min(d_slots, len(pick))
-        pick = pick[rot:] + pick[:rot]
-    idx = 0
-    for p in pick:
-        rotation[idx % blocks].add(p)
-        idx += 1
-    return rotation
+def build_downstairs_rotation(players, total_matches, downstairs_slots, upstairs_slots):
+    """Choose full downstairs groups, balancing rests across the whole session.
 
-_BLOCK_LABELS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-def block_label(i):
-    return _BLOCK_LABELS[i] if 0 <= i < len(_BLOCK_LABELS) else f"Block {i+1}"
+    Each group stays for two matches. Cyclic orders distribute downstairs turns
+    evenly; a small, repeatable search chooses the order with the fairest rests.
+    """
+    if not players or total_matches <= 0 or downstairs_slots <= 0:
+        return []
+    if downstairs_slots > len(players):
+        raise ValueError("Not enough players to fill the downstairs courts.")
+
+    blocks = math.ceil(total_matches / 2)
+    bench_count = max(0, len(players) - downstairs_slots - upstairs_slots)
+    # Protect the normal rest order for the first two matches where feasible.
+    reserve_count = min(2 * bench_count, len(players) - downstairs_slots)
+    reserved = set(players[:reserve_count])
+    base_order = players[downstairs_slots:] + players[:downstairs_slots]
+    base_order = [p for p in base_order if p not in reserved] + \
+                 [p for p in base_order if p in reserved]
+    orders = [base_order]
+    rng = random.Random(0)
+    for _ in range(127):
+        order = players[:]
+        rng.shuffle(order)
+        orders.append([p for p in order if p not in reserved] +
+                      [p for p in order if p in reserved])
+
+    best_rotation, best_score = None, None
+    for order in orders:
+        rotation = [
+            {order[(block * downstairs_slots + j) % len(order)]
+             for j in range(downstairs_slots)}
+            for block in range(blocks)
+        ]
+        rests = {p: 0 for p in players}
+        downstairs_matches = {p: 0 for p in players}
+        for match_no in range(total_matches):
+            downstairs = rotation[match_no // 2]
+            upstairs = [p for p in players if p not in downstairs]
+            for p in select_bench_players(upstairs, rests, bench_count):
+                rests[p] += 1
+            for p in downstairs:
+                downstairs_matches[p] += 1
+        rest_counts = list(rests.values())
+        down_counts = list(downstairs_matches.values())
+        score = (
+            max(rest_counts) - min(rest_counts),
+            sum(n * n for n in rest_counts),
+            max(down_counts) - min(down_counts),
+            sum(n * n for n in down_counts),
+            sum(len(a & b) for a, b in zip(rotation, rotation[1:])),
+        )
+        if best_score is None or score < best_score:
+            best_rotation, best_score = rotation, score
+    return best_rotation
+
 # Determine which match indices (0-based) should prefer same-sex play.
 # Strategy: evenly space N indices across 0..total_matches-1, always including the last match.
 def compute_same_sex_match_indices(total_matches: int, count: int):
@@ -475,188 +494,74 @@ def generate_Schedule_Statistics(team_mtx, opp_mtx, rest_track, names,
 # --------------------------------------------------------------------------- #
 def assign_matches(names, genders, skills, courts, court_sz=4, total_matches=6,
                    samples=100000, reject_mixed=False, enable_skill=False,
-                   skill_wt=20, force_outi_asmo=False,
-                   same_sex_matches_count=0,
-                   use_downstairs_rotation=False,
+                   skill_wt=20, same_sex_matches_count=0,
                    start_dt: datetime | None = None,
                    match_offset: int = 0,
                    header_html: str = "",
                    repeat_header_html: str = "",
                    first_page_footer_html: str = ""):
-    n_players   = len(names)
+    n_players = len(names)
     courts_used = determine_courts_to_use(n_players, len(courts), court_sz)
-
+    active_courts = courts[:courts_used]
+    down_idx, up_idx = identify_downstairs_courts(active_courts)
     teammate_mtx, opponent_mtx = initialize_matrices(n_players)
-    rest_track  = initialize_rest_tracker(n_players)
-    players     = list(range(n_players))
-    history     = set()
+    rest_track = initialize_rest_tracker(n_players)
+    players = list(range(n_players))
+    history = set()
     all_matches = []
 
-    # detect Outi + Asmo indices
-    forced_pair = None
-    if force_outi_asmo:
-        try:
-            forced_pair = (names.index("Asmo"), names.index("Outi"))
-        except ValueError:
-            pass   # one or both not present
-
-    # If using downstairs rotation and we have downstairs courts, schedule by 2-match blocks
-    down_idx, up_idx = identify_downstairs_courts(courts)
-    d_courts = len(down_idx)
-    u_courts = len(up_idx)
-    if use_downstairs_rotation and d_courts > 0:
-        blocks = math.ceil(total_matches / 2)
-        d_slots = d_courts * court_sz
-        rotation = build_downstairs_rotation(players, blocks, d_slots)
-        # Force N=0 when checkbox is off
-        eff_same_sex_count = same_sex_matches_count if reject_mixed else 0
-        spaced_same_sex = compute_same_sex_match_indices(total_matches, eff_same_sex_count)
-
-        all_matches.clear()
-        teammate_mtx, opponent_mtx = initialize_matrices(n_players)
-        rest_track  = initialize_rest_tracker(n_players)
-        history     = set()
-
-        match_counter = 0
-        for b in range(blocks):
-            matches_in_block = 2 if (match_counter + 2) <= total_matches else 1
-            down_group = sorted([p for p in rotation[b] if p in players])
-
-            for _ in range(matches_in_block):
-                st.info(f"--- Assigning players for Match {match_counter+1+match_offset} (Block {block_label(b)}) ---")
-
-                # Upstairs capacity and candidates (downstairs group never benches within block)
-                capacity_up = u_courts * court_sz
-                candidates_up = [p for p in players if p not in down_group]
-                to_bench_up = select_bench_players(candidates_up, rest_track,
-                                                   max(0, len(candidates_up) - capacity_up))
-                available_up = [p for p in candidates_up if p not in to_bench_up]
-
-                # Same-sex preference per match index
-                effective_reject_mixed = (match_counter in spaced_same_sex) if same_sex_matches_count > 0 else bool(reject_mixed)
-
-                # Build downstairs groups
-                groups_down = []
-                if d_courts > 0:
-                    groups_down = find_best_match(
-                        down_group, d_courts, court_sz,
-                        teammate_mtx, opponent_mtx,
-                        match_counter, samples,
-                        effective_reject_mixed, genders, enable_skill, skills, skill_wt, history, forced_pair,
-                        match_offset=match_offset
-                    ) or []
-
-                # Build upstairs groups
-                groups_up = []
-                if u_courts > 0:
-                    groups_up = find_best_match(
-                        available_up, u_courts, court_sz,
-                        teammate_mtx, opponent_mtx,
-                        match_counter, samples,
-                        effective_reject_mixed, genders, enable_skill, skills, skill_wt, history, forced_pair,
-                        match_offset=match_offset
-                    ) or []
-
-                # Merge aligned to original court order
-                merged = [None] * (d_courts + u_courts)
-                for i, g in zip(down_idx, groups_down):
-                    merged[i] = g
-                for i, g in zip(up_idx, groups_up):
-                    merged[i] = g
-                groups_full = merged
-
-                # Update matrices, history, rest (only upstairs benched)
-                for grp in groups_full:
-                    if grp:
-                        history.add(canonical_config(grp))
-                update_matrices_for_match([g for g in groups_full if g], teammate_mtx, opponent_mtx)
-                for p in to_bench_up:
-                    rest_track[p] += 1
-
-                all_matches.append((groups_full, to_bench_up))
-                match_counter += 1
-
-        # Build schedule HTML with reliable page breaks (print-friendly).
-        # Keep the HTML structure simple (matches + explicit page-break divs)
-        # to avoid browser print quirks with flex/min-height wrappers.
-        matches_per_page = 3 if len(courts) <= 4 else 2
-        html_blocks: list[str] = []
-        if header_html:
-            html_blocks.append(header_html)
-        for idx, (groups, bench) in enumerate(all_matches):
-            if idx and idx % matches_per_page == 0:
-                html_blocks.append("<div style='page-break-after: always;'></div>")
-                if repeat_header_html:
-                    html_blocks.append(repeat_header_html)
-            # Compute block label from match index
-            bidx = idx // 2
-            # When downstairs rotation is enabled, don't show block tag in downloadable HTML
-            block_for_title = None if use_downstairs_rotation else block_label(bidx)
-            base_dt = start_dt if start_dt else datetime.combine(date.today(), time(hour=10, minute=30))
-            slot_start = base_dt + timedelta(minutes=15 * idx)
-            slot_end = slot_start + timedelta(minutes=15)
-            time_label = f"{slot_start.strftime('%H:%M')}-{slot_end.strftime('%H:%M')}"
-            html_blocks.append(
-                format_match_table_html(
-                    idx, groups, courts, names, bench,
-                    block_tag=block_for_title,
-                    downstairs_idx=down_idx,
-                    time_label=time_label,
-                    match_offset=match_offset
-                )
-            )
-
-        schedule_html = "".join(html_blocks)
-        return schedule_html, teammate_mtx, opponent_mtx, rest_track, all_matches, courts_used
-
-    # -------- default flow (no downstairs rotation) --------
-    # Force N=0 when checkbox is off
+    # Downstairs stays are part of the normal schedule whenever both levels are
+    # in use. If every active court is downstairs, normal rests can rotate each
+    # match: nobody needs to walk between levels.
+    rotation = build_downstairs_rotation(
+        players, total_matches, len(down_idx) * court_sz, len(up_idx) * court_sz
+    ) if down_idx and up_idx else None
     eff_same_sex_count = same_sex_matches_count if reject_mixed else 0
     spaced_same_sex = compute_same_sex_match_indices(total_matches, eff_same_sex_count)
 
-    for m_no in range(total_matches):
-        st.info(f"--- Assigning players for Match {m_no+1+match_offset} ---")
-
-        capacity = courts_used * court_sz
-        benched  = select_bench_players(players, rest_track,
-                                        max(0, n_players - capacity))
-        available = [p for p in players if p not in benched]
-
-        # ensure forced pair both play or both rest
-        if forced_pair:
-            a_idx, o_idx = forced_pair
-            if a_idx in available and o_idx not in available:
-                available.remove(a_idx); benched.append(a_idx)
-                if o_idx in benched:
-                    benched.remove(o_idx)
-                available.append(o_idx)
-
-        # Apply same-sex preference for specifically chosen matches when count>0,
-        # otherwise fall back to the checkbox behavior for all matches.
+    for match_no in range(total_matches):
+        st.info(f"--- Assigning players for Match {match_no+1+match_offset} ---")
+        if rotation:
+            downstairs = rotation[match_no // 2]
+            upstairs = [p for p in players if p not in downstairs]
+            benched = select_bench_players(
+                upstairs, rest_track, n_players - courts_used * court_sz
+            )
+            court_pools = [
+                (down_idx, [p for p in players if p in downstairs]),
+                (up_idx, [p for p in upstairs if p not in benched]),
+            ]
+        else:
+            benched = select_bench_players(
+                players, rest_track, n_players - courts_used * court_sz
+            )
+            court_pools = [
+                (list(range(courts_used)), [p for p in players if p not in benched])
+            ]
         effective_reject_mixed = (
-            (m_no in spaced_same_sex)
-            if same_sex_matches_count > 0
-            else bool(reject_mixed)
+            match_no in spaced_same_sex
+            if same_sex_matches_count > 0 else bool(reject_mixed)
         )
+        groups = [None] * courts_used
+        for court_indices, available in court_pools:
+            best = find_best_match(
+                available, len(court_indices), court_sz,
+                teammate_mtx, opponent_mtx, match_no, samples,
+                effective_reject_mixed, genders, enable_skill, skills,
+                skill_wt, history, match_offset=match_offset,
+            )
+            for cid, group in zip(court_indices, best):
+                groups[cid] = group
+        for group in groups:
+            history.add(canonical_config(group))
+        update_matrices_for_match(groups, teammate_mtx, opponent_mtx)
+        for p in benched:
+            rest_track[p] += 1
+        all_matches.append((groups, benched))
 
-        best = find_best_match(available, courts_used, court_sz,
-                               teammate_mtx, opponent_mtx, m_no, samples,
-                               effective_reject_mixed, genders, enable_skill, skills,
-                               skill_wt, history, forced_pair)
-
-        if best:
-            for grp in best:
-                history.add(canonical_config(grp))
-            all_matches.append((best, benched))
-            update_matrices_for_match(best, teammate_mtx, opponent_mtx)
-            for p in benched:
-                rest_track[p] += 1
-
-    # ------------ build schedule HTML with reliable page breaks -------------
+    # Preserve the established print layout, times, numbering and repeated focus.
     matches_per_page = 3 if courts_used <= 4 else 2
-    html_blocks: list[str] = []
-    if header_html:
-        html_blocks.append(header_html)
+    html_blocks = [header_html] if header_html else []
     base_dt = start_dt if start_dt else datetime.combine(date.today(), time(hour=10, minute=30))
     for idx, (groups, bench) in enumerate(all_matches):
         if idx and idx % matches_per_page == 0:
@@ -666,17 +571,12 @@ def assign_matches(names, genders, skills, courts, court_sz=4, total_matches=6,
         slot_start = base_dt + timedelta(minutes=15 * idx)
         slot_end = slot_start + timedelta(minutes=15)
         time_label = f"{slot_start.strftime('%H:%M')}-{slot_end.strftime('%H:%M')}"
-        html_blocks.append(
-            format_match_table_html(
-                idx, groups, courts, names, bench,
-                time_label=time_label,
-                match_offset=match_offset
-            )
-        )
-    schedule_html = "".join(html_blocks)
-    # ----------------------------------------------------------------------
-
-    return schedule_html, teammate_mtx, opponent_mtx, rest_track, all_matches, courts_used
+        html_blocks.append(format_match_table_html(
+            idx, groups, active_courts, names, bench,
+            downstairs_idx=down_idx, time_label=time_label,
+            match_offset=match_offset,
+        ))
+    return "".join(html_blocks), teammate_mtx, opponent_mtx, rest_track, all_matches, courts_used
 
 
 # --------------------------------------------------------------------------- #
@@ -710,8 +610,7 @@ def main():
         {"name": "Bevan", "gender": "M", "skill": 5},
         {"name": "Chris", "gender": "M", "skill": 7},
         {"name": "Christine", "gender": "F", "skill": 5},
-        {"name": "Collin T.", "gender": "M", "skill": 6},
-        {"name": "Colin B.", "gender": "M", "skill": 6},
+        {"name": "Collin", "gender": "M", "skill": 6},
         {"name": "Cris B.", "gender": "F", "skill": 5},
         {"name": "Daryoush", "gender": "M", "skill": 6},
         {"name": "Dave", "gender": "M", "skill": 7},
@@ -986,6 +885,12 @@ def main():
     n_sel       = len(players_wg)
     courts_used = determine_courts_to_use(n_sel, len(courts), 4)
     max_unique  = compute_max_unique_matchups(n_sel, courts_used, 4) if n_sel >= courts_used*4 else 0
+    active_down, active_up = identify_downstairs_courts(courts[:courts_used])
+    if active_down and active_up:
+        st.caption("Downstairs courts are included automatically. Players stay downstairs "
+                   "for two matches before rotating; everything appears in one schedule.")
+    if courts_used < len(courts):
+        st.caption(f"With {n_sel} players, the first {courts_used} selected courts can be filled.")
 
     st.header("⚙️ Configuration")
     total_matches = st.number_input("🔢 Matches per schedule", 1, value=6)
@@ -1246,18 +1151,7 @@ def main():
                         f"{body_div}"
                         "</div></div>"
                     )
-    # Show downstairs rotation only if courts 12/13 are selected
-    has_downstairs = any(c.endswith("12") or c == "Court 12" or c == "12" for c in courts) or \
-                     any(c.endswith("13") or c == "Court 13" or c == "13" for c in courts)
-    use_downstairs_rotation = False
-    if has_downstairs:
-        use_downstairs_rotation = st.checkbox(
-            "Use downstairs rotation for courts 12/13", value=True,
-            help=("Splits the session into 2-match blocks and rotates a fixed subgroup "
-                  "downstairs per block; teams reshuffle between the two matches.")
-        )
     with st.expander("🧰 Miscellaneous", expanded=False):
-        force_pairing = st.checkbox("Always pair Outi & Asmo", value=False)
         skill_wt = st.number_input("⚖️ Skill penalty weight", 1, value=20)
         samples = st.number_input("🔍 Random combinations to try (count)", 1, value=default_samples, step=50_000)
         st.caption(f"Approx. unique combinations: {int(max_unique):,}")
@@ -1330,9 +1224,8 @@ def main():
                     players_ng, genders, skills, courts,
                     total_matches=total_matches, samples=samples,
                     reject_mixed=reject_mixed, enable_skill=enable_skill,
-                    skill_wt=skill_wt, force_outi_asmo=force_pairing,
+                    skill_wt=skill_wt,
                     same_sex_matches_count=same_sex_matches_count,
-                    use_downstairs_rotation=use_downstairs_rotation,
                     start_dt=datetime.combine(sess_date, sess_time),
                     match_offset=max(0, int(start_match_number) - 1),
                     header_html=(
@@ -1382,8 +1275,8 @@ def main():
                 # Apply offset to same-sex match indices for display
                 cfg_same_sex_matches = ", ".join(str(i+1 + max(0, int(start_match_number) - 1)) for i in spaced_same_sex) if spaced_same_sex else ("0")
                 cfg_skill = "Yes" if enable_skill else "No"
-                cfg_pair = "Yes" if force_pairing else "No"
-                cfg_down = "Yes" if (use_downstairs_rotation and any(x in courts for x in ("Court 12","12","Court 13","13"))) else "No"
+                active_down, active_up = identify_downstairs_courts(courts[:used])
+                cfg_down = "Automatic (two-match stays)" if active_down and active_up else "No"
                 cfg_html = (
                     f"<div style='background:#eef6ff;border:1px solid #cce0ff;padding:10px;border-radius:8px;margin-bottom:10px;'>"
                     f"<h3 style='margin:0 0 8px 0;'>Configuration</h3>"
@@ -1391,7 +1284,6 @@ def main():
                     f"<li>Skill-based: {cfg_skill}</li>"
                     f"<li>Same-sex preferred: {cfg_same_sex} (matches: {cfg_same_sex_matches})</li>"
                     f"<li>Downstairs rotation (12/13): {cfg_down}</li>"
-                    f"<li>Always pair Outi & Asmo: {cfg_pair}</li>"
                     f"</ul></div>"
                 )
                 stats_html = stats_html.replace(
