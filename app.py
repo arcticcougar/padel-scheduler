@@ -1081,7 +1081,7 @@ def main():
         guest_players = []
         for gi in range(8):
             with st.container(key=f"guest_controls_{gi}"):
-                cn, cg, cs, cp = st.columns([2, 1, 1, 2])
+                cn, cg, cs, cp = st.columns([1.5, 1.2, 1.5, 1.8])
                 gname  = cn.text_input(f"Guest Player {gi+1}", key=f"g_nm_{gi}")
                 ggen   = cg.radio("Gender", ["F", "M"], horizontal=True, key=f"g_gen_{gi}")
                 gskill = cs.number_input("Skill", 1, 10, 5, key=f"g_sk_{gi}")
