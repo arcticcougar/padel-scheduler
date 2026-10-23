@@ -42,6 +42,10 @@ div[data-testid="stProgressBar"] { margin: 2px 0; padding: 2px 0; }
 }
 [data-testid="stExpanderDetails"] { padding: .6rem; }
 .st-key-session_details h1 { font-size: clamp(1.75rem, 4.5vw, 2.25rem); }
+[class*="st-key-guest_controls_"] {
+    padding-bottom: .75rem; border-bottom: 1px solid rgba(128, 128, 128, .2);
+}
+.st-key-guest_controls_7 { padding-bottom: 0; border-bottom: 0; }
 /* Keep the existing dense grid, with a clear selectable row and keyboard focus. */
 :is(.st-key-regular_player_grid, .st-key-regular_court_grid) [data-testid="stCheckbox"] label {
     box-sizing: border-box; width: 100%; min-height: 1.5rem;
@@ -62,6 +66,15 @@ div[data-testid="stProgressBar"] { margin: 2px 0; padding: 2px 0; }
     outline: 2px solid #60a5fa; outline-offset: 2px;
 }
 @media (max-width: 640px) {
+    [class*="st-key-guest_controls_"] > [data-testid="stHorizontalBlock"] {
+        display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: .5rem .75rem;
+    }
+    [class*="st-key-guest_controls_"] [data-testid="stColumn"] {
+        min-width: 0 !important; width: 100% !important;
+    }
+    [class*="st-key-guest_controls_"] [data-testid="stColumn"]:first-child,
+    [class*="st-key-guest_controls_"] [data-testid="stColumn"]:last-child { grid-column: 1 / -1; }
     .st-key-session_settings [data-testid="stHorizontalBlock"] {
         display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
         gap: .5rem .75rem;
@@ -1057,14 +1070,23 @@ def main():
 
     # ------------ guest players ---------------------------
     with st.expander("➕ Add Up to 8 Guest Players (optional)", expanded=False):
+        # A visible radio label changes Streamlit's widget identity. Carry forward
+        # existing guests' genders once, before registering the labelled widgets.
+        if not st.session_state.get("guest_gender_label_migrated", False):
+            for gi in range(8):
+                gender_key = f"g_gen_{gi}"
+                if gender_key in st.session_state:
+                    st.session_state[gender_key] = st.session_state[gender_key]
+            st.session_state["guest_gender_label_migrated"] = True
         guest_players = []
         for gi in range(8):
-            cn, cg, cs, cp = st.columns([2, 1, 1, 2])
-            gname  = cn.text_input(f"Guest Player {gi+1}", key=f"g_nm_{gi}")
-            ggen   = cg.radio("", ["F", "M"], horizontal=True, key=f"g_gen_{gi}")
-            gskill = cs.number_input("Skill", 1, 10, 5, key=f"g_sk_{gi}")
-            with cp:
-                glimit = player_court_preference(gname.strip(), f"g_court_pref_{gi}")
+            with st.container(key=f"guest_controls_{gi}"):
+                cn, cg, cs, cp = st.columns([2, 1, 1, 2])
+                gname  = cn.text_input(f"Guest Player {gi+1}", key=f"g_nm_{gi}")
+                ggen   = cg.radio("Gender", ["F", "M"], horizontal=True, key=f"g_gen_{gi}")
+                gskill = cs.number_input("Skill", 1, 10, 5, key=f"g_sk_{gi}")
+                with cp:
+                    glimit = player_court_preference(gname.strip(), f"g_court_pref_{gi}")
 
             if gname.strip():
                 name = gname.strip()
