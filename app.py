@@ -28,6 +28,18 @@ div[data-testid="stProgressBar"] > div[role="progressbar"] {
 }
 div[data-testid="stProgressBar"] { margin: 2px 0; padding: 2px 0; }
 .css-1n76uvr, .stAlert          { padding: .3rem .5rem!important; margin: .2rem 0!important; }
+[data-testid="stMainBlockContainer"] {
+    padding-top: 3rem; padding-bottom: 3rem;
+}
+[data-testid="stVerticalBlock"] { gap: .6rem; }
+[data-testid="stMarkdownContainer"] li {
+    line-height: 1.4; margin-top: .1rem; margin-bottom: .1rem;
+}
+[data-testid="stMarkdownContainer"] hr { margin: .75rem 0; }
+[data-testid="stExpander"] summary {
+    padding: .5rem .75rem; min-height: 2.5rem;
+}
+[data-testid="stExpanderDetails"] { padding: .75rem; }
 </style>
 """
 st.markdown(COMPACT_CSS, unsafe_allow_html=True)
@@ -1029,13 +1041,6 @@ def main():
     players_wg = deduplicate_names(raw_wg)
     players_ng = deduplicate_names(raw_ng)
 
-    st.markdown("---\n**📋 Final Player List (rest order):**", unsafe_allow_html=True)
-    st.markdown(
-        "\n".join(f"{i+1}. {p}{format_court_preference_icon(limit)}"
-                  for i, (p, limit) in enumerate(zip(players_wg, downstairs_limits))),
-        unsafe_allow_html=True,
-    )
-
     # Totals by gender for selected players
     male_count   = sum(1 for g in genders if g == "M")
     female_count = sum(1 for g in genders if g == "F")
@@ -1048,6 +1053,13 @@ def main():
     st.markdown(
         f"**Totals:** {male_num} {male_word} {male_sym}, {female_num} {female_word} {female_sym}",
         unsafe_allow_html=True
+    )
+
+    st.markdown("---\n**📋 Final Player List (rest order):**", unsafe_allow_html=True)
+    st.markdown(
+        "\n".join(f"{i+1}. {p}{format_court_preference_icon(limit) if limit != 2 else ''}"
+                  for i, (p, limit) in enumerate(zip(players_wg, downstairs_limits))),
+        unsafe_allow_html=True,
     )
 
     # ------------ court selection ------------------------
