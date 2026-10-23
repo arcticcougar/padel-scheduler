@@ -765,6 +765,9 @@ def main():
     [class*="st-key-player_controls_"] [data-testid="stNumberInputContainer"] > div {
         border-top-right-radius: 0; border-bottom-right-radius: 0;
     }
+    [class*="st-key-player_controls_"] [data-testid="stPopover"] > div[aria-haspopup] [data-testid="stTooltipHoverTarget"] {
+        width: 100%;
+    }
     [class*="st-key-player_controls_"] [data-testid="stPopover"] button {
         width: 100%; height: 2.5rem; min-height: 2.5rem; padding: 0;
         border-radius: 0 .5rem .5rem 0; border: 1px solid #2563eb;
