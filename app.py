@@ -1672,7 +1672,7 @@ def main():
         st.session_state["all_stats"].clear()
         st.session_state["date_str_uk"] = date_str
 
-        with st.spinner("🔄 Generating schedule..."):
+        with st.status("Generating schedule...", expanded=True) as generation_status:
             for s_no in range(num_sched):
                 st.info(f"Generating Schedule {s_no+1}/{num_sched}...")
                 sched_html, tm, om, rest, all_matches, used = assign_matches(
@@ -1780,6 +1780,7 @@ def main():
                     1
                 )
                 st.session_state["all_stats"].append(stats_html)
+            generation_status.update(label="Generation details", state="complete", expanded=False)
         st.success("Schedule(s) generated successfully!")
 
     # ---------------- downloads --------------------------
