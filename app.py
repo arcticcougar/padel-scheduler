@@ -473,7 +473,7 @@ def format_downstairs_court_icon():
 
 
 def schedule_background_html():
-    """Original, sparse padel doodles; embedded vector art keeps downloads portable."""
+    """Original, closely packed padel doodles in portable, light-grey vector art."""
     return """
     <svg class="sched-doodles" xmlns="http://www.w3.org/2000/svg"
          viewBox="0 0 800 1140" preserveAspectRatio="none" aria-hidden="true" focusable="false">
@@ -487,42 +487,57 @@ def schedule_background_html():
           <circle cx="20" cy="36" r="2"/>
           <path d="M8 11c-3 4-4 8-3 12"/>
         </g>
-        <pattern id="padel-doodle-tile" width="300" height="300" patternUnits="userSpaceOnUse">
+        <pattern id="padel-doodle-tile" width="240" height="240" patternUnits="userSpaceOnUse">
           <g fill="none" stroke="#cdcdcd" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round">
-            <use href="#doodle-racket" transform="translate(22 20) rotate(-22 22 35)"/>
-            <use href="#doodle-racket" transform="translate(50 176) rotate(25 22 35) scale(.8)"/>
+            <use href="#doodle-racket" transform="translate(12 9) rotate(-18 22 35)"/>
+            <use href="#doodle-racket" transform="translate(17 143) rotate(25 22 35) scale(.85)"/>
             <!-- Padel balls with their curved seams. -->
-            <g transform="translate(122 34) rotate(25)">
+            <g transform="translate(105 20) rotate(25)">
               <circle r="12"/><path d="M-7-10c8 5 8 15 0 20M7-10c-8 5-8 15 0 20"/>
             </g>
-            <g transform="translate(269 207) rotate(-20)">
+            <g transform="translate(222 179) rotate(-20)">
               <circle r="9"/><path d="M-5-7c5 4 5 10 0 14M5-7c-5 4-5 10 0 14"/>
             </g>
             <!-- A glass-sided court and centre net. -->
-            <g transform="translate(205 27) rotate(12 26 40)">
+            <g transform="translate(158 10) rotate(10 26 40)">
               <rect x="0" y="0" width="52" height="80" rx="3"/>
               <path d="M0 40h52M3 36v8m46-8v8M0 21h52M0 59h52M26 21v38M-5 4v21m62 30v21"/>
             </g>
             <!-- Water bottle, with a loose hand-drawn label. -->
-            <g transform="translate(111 100) rotate(14 12 27)">
+            <g transform="translate(86 76) rotate(12 12 27)">
               <path d="M7 4h10v8l5 7v34c0 5-22 5-22 0V19l7-7ZM6 0h12v5H6ZM0 29c8-3 14 3 22 0M0 43c8-3 14 3 22 0"/>
             </g>
             <!-- Court net. -->
-            <g transform="translate(176 174) rotate(-9 36 18)">
+            <g transform="translate(134 147) rotate(-8 36 18)">
               <path d="M0 0v43m72-43v43M0 8c24 5 48 5 72 0M0 32h72M12 11v21m12-19v19m12-18v18m12-19v19m12-21v21M0 20h72"/>
             </g>
             <!-- Trainers and towel. -->
-            <g transform="translate(109 240) rotate(-12)">
+            <g transform="translate(85 196) rotate(-12)">
               <path d="M0 18 7 0l16 8 8 10 22 5c8 2 8 13 0 13H5c-7 0-9-11-5-18ZM0 28h58M13 9l12 6m-15 0 13 6m4-4-5 7"/>
             </g>
-            <g transform="translate(219 257) rotate(14)">
+            <g transform="translate(179 201) rotate(10)">
               <path d="M0 0h44v31H0ZM8 0v31m28-31v31M0 26h44M3 31v4m6-4v4m6-4v4m6-4v4m6-4v4m6-4v4m6-4v4"/>
             </g>
             <!-- Sunny Mijas, plus small movement marks and sparkles. -->
-            <g transform="translate(269 132)">
+            <g transform="translate(211 116)">
               <circle r="8"/><path d="M0-13v-5m0 31v5m13-18h5m-31 0h-5m27-9 4-4m-22 22-4 4m22-4 4 4m-22-22-4-4"/>
             </g>
-            <path d="m167 75 2 7 7 2-7 2-2 7-2-7-7-2 7-2ZM20 131l2 5 5 2-5 2-2 5-2-5-5-2 5-2M151 188l2 5m-10 0 2 5M76 94l6-2m-4 9 6-2M18 281c7-8 15-8 22-3"/>
+            <!-- Smaller sports doodles and bubbles fill the gaps between motifs. -->
+            <g transform="translate(14 100) rotate(-12 18 12)">
+              <path d="M0 15C3 1 20-4 28 13l10 6c-11 6-25 7-38-4ZM2 14c9 3 17 2 26-1M13 2l-2 11"/>
+            </g>
+            <g transform="translate(122 45) rotate(-9 13 10)">
+              <rect width="26" height="21" rx="3"/><path d="M13 0v21M0 10h26M7 5v1m12-1v1M7 15v1m12-1v1"/>
+            </g>
+            <g transform="translate(143 116) rotate(55)">
+              <circle r="10"/><path d="M-6-8c6 4 6 12 0 16M6-8c-6 4-6 12 0 16"/>
+            </g>
+            <path d="M61 136c-6-9 5-14 9-7 5-7 14-1 8 6l-8 9ZM117 163c5-7 10-5 9 0-2 6-9 5-7 11m8-41 2 5 5 2-5 2-2 5-2-5-5-2 5-2ZM61 219l7 5-7 5-4-5ZM73 50l2 6 6 2-6 2-2 6-2-6-6-2 6-2ZM163 214l2 4m-9 1 2 4M68 88l5-2m-3 8 5-2M8 232c7-7 15-7 21-2"/>
+            <circle cx="74" cy="13" r="3"/><circle cx="134" cy="8" r="4"/>
+            <circle cx="234" cy="69" r="3"/><circle cx="130" cy="85" r="3"/>
+            <circle cx="74" cy="172" r="4"/><circle cx="158" cy="231" r="3"/>
+            <circle cx="7" cy="93" r="2"/><circle cx="235" cy="142" r="3"/>
+            <circle cx="234" cy="215" r="2"/><circle cx="232" cy="19" r="3"/>
           </g>
         </pattern>
       </defs>
