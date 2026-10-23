@@ -1785,6 +1785,10 @@ def main():
     # ---------------- downloads --------------------------
     if st.session_state["all_schedules"]:
         st.subheader("📥 Download")
+        st.markdown(
+            "Open the downloaded schedule in your browser and choose **Print**. "
+            "Use **A4, portrait**, or choose **Save as PDF** in the print window for a PDF copy."
+        )
         for i, sched in enumerate(st.session_state["all_schedules"]):
             fn = f"Schedule_{i+1}_{date_str.replace(' ','_')}.html"
             clicked_schedule = st.download_button(f"📄 Schedule {i+1}", sched, fn, "text/html")
