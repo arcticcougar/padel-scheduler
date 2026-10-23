@@ -41,6 +41,7 @@ div[data-testid="stProgressBar"] { margin: 2px 0; padding: 2px 0; }
     padding: .5rem .75rem; min-height: 2.5rem;
 }
 [data-testid="stExpanderDetails"] { padding: .6rem; }
+.st-key-session_details h1 { font-size: clamp(1.75rem, 4.5vw, 2.25rem); }
 /* Keep the existing dense grid, with a clear selectable row and keyboard focus. */
 :is(.st-key-regular_player_grid, .st-key-regular_court_grid) [data-testid="stCheckbox"] label {
     box-sizing: border-box; width: 100%; min-height: 1.5rem;
@@ -61,6 +62,14 @@ div[data-testid="stProgressBar"] { margin: 2px 0; padding: 2px 0; }
     outline: 2px solid #60a5fa; outline-offset: 2px;
 }
 @media (max-width: 640px) {
+    .st-key-session_settings [data-testid="stHorizontalBlock"] {
+        display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: .5rem .75rem;
+    }
+    .st-key-session_settings [data-testid="stColumn"] {
+        min-width: 0 !important; width: 100% !important;
+    }
+    .st-key-session_settings [data-testid="stColumn"]:first-child { grid-column: 1 / -1; }
     .st-key-regular_player_grid > [data-testid="stHorizontalBlock"],
     .st-key-regular_court_grid > [data-testid="stHorizontalBlock"] {
         display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -78,6 +87,9 @@ div[data-testid="stProgressBar"] { margin: 2px 0; padding: 2px 0; }
     }
     [data-testid="stButton"] button,
     [data-testid="stDownloadButton"] button { width: 100%; min-height: 2.75rem; }
+}
+@media (max-width: 400px) {
+    .st-key-session_settings [data-testid="stHorizontalBlock"] { grid-template-columns: minmax(0, 1fr); }
 }
 </style>
 """
@@ -739,13 +751,18 @@ def main():
             st.session_state[k] = v
 
     # ----------------- page header ----------------------
-    st.title("Mijas Padellers Match Scheduler")
-    sess_date = st.date_input("📅 Session Date", value=date.today())
-    sess_time = st.time_input("⏰ Start Time", value=time(hour=10, minute=30))
-    # Start match number placed directly below time input for clarity
-    start_match_number = st.number_input("Start match number", min_value=1, value=1)
-    date_str  = sess_date.strftime("%A %d %B %Y")
-    st.write("Selected date:", date_str, "at", sess_time.strftime("%H:%M"))
+    with st.container(key="session_details"):
+        st.title("Mijas Padellers Match Scheduler")
+    with st.container(key="session_settings", border=True):
+        date_col, time_col, number_col = st.columns([1.3, 1, 1])
+        with date_col:
+            sess_date = st.date_input("📅 Session Date", value=date.today())
+        with time_col:
+            sess_time = st.time_input("⏰ Start Time", value=time(hour=10, minute=30))
+        with number_col:
+            start_match_number = st.number_input("Start match number", min_value=1, value=1)
+        date_str = sess_date.strftime("%A %d %B %Y")
+        st.caption(f"Selected date: {date_str} at {sess_time.strftime('%H:%M')}")
 
     # ----------------- player master list ---------------
     # Permanent court defaults: 2 = Standard rotation, 0 = Keep upstairs,
