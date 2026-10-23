@@ -748,8 +748,42 @@ def main():
         "Keep downstairs: allows up to 4 downstairs matches in two-match stays. "
         "The scheduler chooses how many are needed; nobody plays 6 downstairs matches."
     )
+    # Scope the joined controls to regular-player rows. Keep the inner columns
+    # together on small screens while the outer player grid can still stack.
+    st.markdown("""
+    <style>
+    [class*="st-key-player_controls_"] [data-testid="stHorizontalBlock"] {
+        flex-wrap: nowrap !important; gap: 0 !important;
+    }
+    [class*="st-key-player_controls_"] [data-testid="stColumn"]:first-child {
+        flex: 1 1 0 !important; min-width: 0 !important; width: auto !important;
+    }
+    [class*="st-key-player_controls_"] [data-testid="stColumn"]:last-child {
+        flex: 0 0 2.5rem !important; min-width: 2.5rem !important; width: 2.5rem !important;
+    }
+    [class*="st-key-player_controls_"] [data-testid="stNumberInputContainer"],
+    [class*="st-key-player_controls_"] [data-testid="stNumberInputContainer"] > div {
+        border-top-right-radius: 0; border-bottom-right-radius: 0;
+    }
+    [class*="st-key-player_controls_"] [data-testid="stPopover"] button {
+        width: 100%; height: 2.5rem; min-height: 2.5rem; padding: 0;
+        border-radius: 0 .5rem .5rem 0; border: 1px solid #2563eb;
+        background: #2563eb; color: #fff; justify-content: center; gap: 0;
+    }
+    [class*="st-key-player_controls_"] [data-testid="stPopover"] button:hover {
+        background: #1d4ed8; border-color: #1d4ed8; color: #fff;
+    }
+    [class*="st-key-player_controls_"] [data-testid="stPopover"] button:focus-visible {
+        outline: 2px solid #93c5fd; outline-offset: 2px;
+    }
+    [class*="st-key-player_controls_"] [data-testid="stPopover"] button [data-testid="stMarkdownContainer"] {
+        position: absolute; width: 1px; height: 1px; overflow: hidden;
+        clip-path: inset(50%); white-space: nowrap;
+    }
+    </style>
+    """, unsafe_allow_html=True)
 
-    def player_court_preference(name, key, default_limit=2):
+    def player_court_preference(name, key, default_limit=2, compact=False):
         # Carry forward choices from the previous version in an existing session.
         if key not in st.session_state:
             previous = st.session_state.get("downstairs_player_preferences", {})
@@ -757,7 +791,17 @@ def main():
             st.session_state[key] = next(
                 label for label, value in court_preferences.items() if value == limit
             )
-        choice = st.selectbox("Court preference", court_labels, key=key, help=court_help)
+        if compact:
+            current = st.session_state[key]
+            with st.popover(
+                f"Court preference for {name}: {current}",
+                help=f"{name}: {current}. {court_help}",
+                use_container_width=True,
+            ):
+                choice = st.radio(f"Court preference for {name}", court_labels, key=key,
+                                  help=court_help)
+        else:
+            choice = st.selectbox("Court preference", court_labels, key=key, help=court_help)
         return court_preferences[choice]
 
     st.header("👥 Select Regular Players")
@@ -773,11 +817,16 @@ def main():
                     idx = c * per_col + r
                     if idx < len(REGULAR_PLAYERS):
                         p = REGULAR_PLAYERS[idx]
-                        p["skill"] = st.number_input(p["name"], 1, 10, p["skill"],
-                                                     key=f"skill_{p['name']}")
-                        p["downstairs_limit"] = player_court_preference(
-                            p["name"], f"court_pref_{p['name']}", p["downstairs_limit"]
-                        )
+                        with st.container(key=f"player_controls_{idx}"):
+                            skill_col, pref_col = st.columns([1, .2], vertical_alignment="bottom")
+                            with skill_col:
+                                p["skill"] = st.number_input(p["name"], 1, 10, p["skill"],
+                                                             key=f"skill_{p['name']}")
+                            with pref_col:
+                                p["downstairs_limit"] = player_court_preference(
+                                    p["name"], f"court_pref_{p['name']}", p["downstairs_limit"],
+                                    compact=True,
+                                )
 
         # ------- live grouped-by-skill summary (inside expander) -------
         st.markdown("**📊 Current Regulars Grouped by Skill (live):**", unsafe_allow_html=True)
