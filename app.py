@@ -582,8 +582,7 @@ def format_match_table_html(match_no, groups, court_names, player_names, bench,
     resting = ", ".join(player_names[p] for p in bench)
     html += f"""
           </tbody><tfoot><tr>
-            <td style="width:20%;padding:6px;background:#f0f0f0;font-weight:bold;">Resting</td>
-            <td style="width:80%;padding:6px;background:#f0f0f0;" colspan="3">{resting}</td>
+            <td style="padding:6px;background:#f0f0f0;" colspan="4"><strong>Resting:</strong> {resting}</td>
           </tr></tfoot></table></div></div>"""
     return html
 
