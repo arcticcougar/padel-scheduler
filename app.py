@@ -29,17 +29,18 @@ div[data-testid="stProgressBar"] > div[role="progressbar"] {
 div[data-testid="stProgressBar"] { margin: 2px 0; padding: 2px 0; }
 .css-1n76uvr, .stAlert          { padding: .3rem .5rem!important; margin: .2rem 0!important; }
 [data-testid="stMainBlockContainer"] {
-    padding-top: 3rem; padding-bottom: 3rem;
+    padding-top: 2.5rem; padding-bottom: 2.5rem;
 }
-[data-testid="stVerticalBlock"] { gap: .6rem; }
+[data-testid="stVerticalBlock"] { gap: .5rem; }
+[data-testid="stCheckbox"] { margin-top: 0 !important; margin-bottom: 0 !important; }
 [data-testid="stMarkdownContainer"] li {
-    line-height: 1.4; margin-top: .1rem; margin-bottom: .1rem;
+    line-height: 1.35; margin-top: .075rem; margin-bottom: .075rem;
 }
-[data-testid="stMarkdownContainer"] hr { margin: .75rem 0; }
+[data-testid="stMarkdownContainer"] hr { margin: .6rem 0; }
 [data-testid="stExpander"] summary {
     padding: .5rem .75rem; min-height: 2.5rem;
 }
-[data-testid="stExpanderDetails"] { padding: .75rem; }
+[data-testid="stExpanderDetails"] { padding: .6rem; }
 </style>
 """
 st.markdown(COMPACT_CSS, unsafe_allow_html=True)
@@ -390,6 +391,14 @@ def format_court_preference_icon(limit):
         f"<span class='court-preference-icon' style='color:{colour};font-weight:600;"
         "margin-left:.3em;' "
         f"title='{description}' role='img' aria-label='{description}'>{arrow}&#xfe0e;</span>"
+    )
+
+
+def format_downstairs_court_icon():
+    return (
+        "<span class='downstairs-court-icon' style='color:#ff4b4b;font-weight:600;"
+        "margin-left:.3em;' title='Downstairs court' role='img' "
+        "aria-label='Downstairs court'>↓&#xfe0e;</span>"
     )
 
 
@@ -1051,7 +1060,8 @@ def main():
     male_num     = f"<span style='color:cyan;'>{male_count}</span>"
     female_num   = f"<span style='color:magenta;'>{female_count}</span>"
     st.markdown(
-        f"**Totals:** {male_num} {male_word} {male_sym}, {female_num} {female_word} {female_sym}",
+        f"**Totals:** {len(players_ng)} Players [ {male_num} {male_word} {male_sym}, "
+        f"{female_num} {female_word} {female_sym} ]",
         unsafe_allow_html=True
     )
 
@@ -1065,6 +1075,7 @@ def main():
     # ------------ court selection ------------------------
     st.header("🎾 Select Regular Courts")
     REG_COURTS  = [f"Court {i}" for i in range(1, 17)]
+    regular_downstairs, _ = identify_downstairs_courts(REG_COURTS)
     per_col_c   = math.ceil(len(REG_COURTS) / 4)
     cols_c      = st.columns(4)
     sel_courts  = []
@@ -1073,7 +1084,10 @@ def main():
             for r in range(per_col_c):
                 idx = c * per_col_c + r
                 if idx < len(REG_COURTS):
-                    if st.checkbox(REG_COURTS[idx], key=f"court_{idx}"):
+                    court_label = REG_COURTS[idx]
+                    if idx in regular_downstairs:
+                        court_label += " :red[↓\ufe0e]"
+                    if st.checkbox(court_label, key=f"court_{idx}"):
                         sel_courts.append(REG_COURTS[idx])
 
     with st.expander("➕ Add Up to 4 Custom Courts (optional)", expanded=False):
@@ -1084,8 +1098,14 @@ def main():
                 custom_courts.append(cc.strip())
 
     courts = sel_courts + custom_courts
+    selected_downstairs, _ = identify_downstairs_courts(courts)
     st.markdown("---\n**🏟️ Final Court List:**")
-    st.markdown("\n".join(f"{i+1}. {c}" for i, c in enumerate(courts)) or "No courts selected.")
+    st.markdown(
+        "\n".join(f"{i+1}. {_html.escape(c)}"
+                  f"{format_downstairs_court_icon() if i in selected_downstairs else ''}"
+                  for i, c in enumerate(courts)) or "No courts selected.",
+        unsafe_allow_html=True,
+    )
 
     # ------------- configuration inputs ------------------
     n_sel       = len(players_wg)
