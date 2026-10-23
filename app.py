@@ -788,6 +788,7 @@ def main():
     # Permanent court defaults: 2 = Standard rotation, 0 = Keep upstairs,
     # 4 = Keep downstairs (up to four matches, in two-match stays).
     REGULAR_PLAYERS = [
+        {"name": "Agelina", "gender": "F", "skill": 5, "downstairs_limit": 2},
         {"name": "Aideen", "gender": "F", "skill": 5, "downstairs_limit": 2},
         {"name": "Anna", "gender": "F", "skill": 5, "downstairs_limit": 2},
         {"name": "Anne", "gender": "F", "skill": 4, "downstairs_limit": 0},
