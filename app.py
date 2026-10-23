@@ -41,6 +41,25 @@ div[data-testid="stProgressBar"] { margin: 2px 0; padding: 2px 0; }
     padding: .5rem .75rem; min-height: 2.5rem;
 }
 [data-testid="stExpanderDetails"] { padding: .6rem; }
+@media (max-width: 640px) {
+    .st-key-regular_player_grid > [data-testid="stHorizontalBlock"],
+    .st-key-regular_court_grid > [data-testid="stHorizontalBlock"] {
+        display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: .75rem;
+    }
+    .st-key-regular_player_grid > [data-testid="stHorizontalBlock"] > [data-testid="stColumn"],
+    .st-key-regular_court_grid > [data-testid="stHorizontalBlock"] > [data-testid="stColumn"] {
+        width: 100% !important; min-width: 0 !important;
+    }
+    .st-key-regular_player_grid [data-testid="stVerticalBlock"],
+    .st-key-regular_court_grid [data-testid="stVerticalBlock"] { gap: .125rem; }
+    .st-key-regular_player_grid [data-testid="stCheckbox"] label,
+    .st-key-regular_court_grid [data-testid="stCheckbox"] label {
+        min-height: 2.75rem; width: 100%; align-items: center;
+    }
+    [data-testid="stButton"] button,
+    [data-testid="stDownloadButton"] button { width: 100%; min-height: 2.75rem; }
+}
 </style>
 """
 st.markdown(COMPACT_CSS, unsafe_allow_html=True)
@@ -984,20 +1003,21 @@ def main():
 
     # ------------ player selection ------------------------
     per_col = math.ceil(len(REGULAR_PLAYERS) / 4)
-    cols_p  = st.columns(4)
-    for c in range(4):
-        with cols_p[c]:
-            for r in range(per_col):
-                idx = c * per_col + r
-                if idx < len(REGULAR_PLAYERS):
-                    p = REGULAR_PLAYERS[idx]
-                    sel = st.checkbox(p["name"], key=f"p_sel_{p['name']}{idx}")
-                    if sel:
-                        if st.session_state["player_selection_order"].get(p["name"]) is None:
-                            st.session_state["player_selection_order"][p["name"]] = st.session_state["player_counter"]
-                            st.session_state["player_counter"] += 1
-                    else:
-                        st.session_state["player_selection_order"][p["name"]] = None
+    with st.container(key="regular_player_grid"):
+        cols_p = st.columns(4)
+        for c in range(4):
+            with cols_p[c]:
+                for r in range(per_col):
+                    idx = c * per_col + r
+                    if idx < len(REGULAR_PLAYERS):
+                        p = REGULAR_PLAYERS[idx]
+                        sel = st.checkbox(p["name"], key=f"p_sel_{p['name']}{idx}")
+                        if sel:
+                            if st.session_state["player_selection_order"].get(p["name"]) is None:
+                                st.session_state["player_selection_order"][p["name"]] = st.session_state["player_counter"]
+                                st.session_state["player_counter"] += 1
+                        else:
+                            st.session_state["player_selection_order"][p["name"]] = None
 
     # ------------ guest players ---------------------------
     with st.expander("➕ Add Up to 8 Guest Players (optional)", expanded=False):
@@ -1093,18 +1113,19 @@ def main():
     REG_COURTS  = [f"Court {i}" for i in range(1, 17)]
     regular_downstairs, _ = identify_downstairs_courts(REG_COURTS)
     per_col_c   = math.ceil(len(REG_COURTS) / 4)
-    cols_c      = st.columns(4)
     sel_courts  = []
-    for c in range(4):
-        with cols_c[c]:
-            for r in range(per_col_c):
-                idx = c * per_col_c + r
-                if idx < len(REG_COURTS):
-                    court_label = REG_COURTS[idx]
-                    if idx in regular_downstairs:
-                        court_label += " :red[↓\ufe0e]"
-                    if st.checkbox(court_label, key=f"court_{idx}"):
-                        sel_courts.append(REG_COURTS[idx])
+    with st.container(key="regular_court_grid"):
+        cols_c = st.columns(4)
+        for c in range(4):
+            with cols_c[c]:
+                for r in range(per_col_c):
+                    idx = c * per_col_c + r
+                    if idx < len(REG_COURTS):
+                        court_label = REG_COURTS[idx]
+                        if idx in regular_downstairs:
+                            court_label += " :red[↓\ufe0e]"
+                        if st.checkbox(court_label, key=f"court_{idx}"):
+                            sel_courts.append(REG_COURTS[idx])
 
     with st.expander("➕ Add Up to 4 Custom Courts (optional)", expanded=False):
         custom_courts = []
