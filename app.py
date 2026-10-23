@@ -1684,6 +1684,7 @@ def main():
                         .match-block table{{margin-bottom:0;}}
                         .match-block th,.match-block td{{border:0!important;border-bottom:.5pt solid #aaa!important;padding:4px 5px!important;background:#fff!important;color:#000!important;vertical-align:middle;}}
                         .match-block thead th{{font-size:11pt;border-bottom:1pt solid #555!important;}}
+                        .match-block thead th:nth-child(2),.match-block tbody td:nth-child(2){{text-align:right!important;}}
                         .match-block tr{{break-inside:avoid;background:#fff!important;}}
                         .match-block tfoot td{{font-size:11pt;border-bottom:0!important;}}
                         .sched-title{{font-size:18pt;}}
