@@ -476,7 +476,7 @@ def schedule_background_html():
     """Original, closely packed padel doodles in portable, light-grey vector art."""
     return """
     <svg class="sched-doodles" xmlns="http://www.w3.org/2000/svg"
-         viewBox="0 0 800 1140" preserveAspectRatio="none" aria-hidden="true" focusable="false">
+         viewBox="0 0 884 1223" preserveAspectRatio="none" aria-hidden="true" focusable="false">
       <defs>
         <g id="doodle-racket" fill="none" stroke-linecap="round" stroke-linejoin="round">
           <path d="M22 4C8 3 1 14 3 28c1 10 9 15 13 21v18c0 4 11 4 11 0V49c4-6 12-11 13-21C42 14 36 4 22 4Z"/>
@@ -541,7 +541,7 @@ def schedule_background_html():
           </g>
         </pattern>
       </defs>
-      <rect width="800" height="1140" fill="url(#padel-doodle-tile)"/>
+      <rect width="884" height="1223" fill="url(#padel-doodle-tile)"/>
     </svg>
     """
 
@@ -1661,13 +1661,13 @@ def main():
                     body{{font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;background:#fff;color:#000;margin:0;padding:20px;}}
                     .sched-doodles{{position:fixed;inset:0;width:100%;height:100%;z-index:0;pointer-events:none;}}
                     .container{{position:relative;z-index:1;}}
-                    .sched-heading{{background:#fff;}}
+                    .sched-heading{{background:transparent;}}
                     table{{width:100%;border-collapse:collapse;margin-bottom:10px;table-layout:fixed;}}
                     th,td{{padding:6px;border:1px solid #ddd;text-align:left;}}
                     th{{background:#f2f2f2;font-size:1.1em;}}
                     tr:nth-child(even){{background:#f9f9f9;}}
-                    .sched-title{{text-align:center;margin:0 0 4px 0;font-size:1.7em;background:#fff;}}
-                    .sched-date{{text-align:center;margin:0 0 6px 0;font-size:1.15em;font-weight:600;background:#fff;}}
+                    .sched-title{{display:table;max-width:100%;text-align:center;margin:0 auto 4px;padding:4px 10px;font-size:1.7em;background:#fff;}}
+                    .sched-date{{display:table;max-width:100%;text-align:center;margin:0 auto 10px;padding:3px 10px;font-size:1.15em;font-weight:600;background:#fff;}}
                     .sched-focus{{margin:0 auto 12px auto;max-width:980px;padding:0 28px;box-sizing:border-box;}}
                     .sched-focus-inner{{background:#eef6ff;border:1px solid #cce0ff;border-radius:10px;padding:10px 12px;text-align:center;line-height:1.25;color:#111;}}
                     .sched-focus-inner{{-webkit-print-color-adjust:exact;print-color-adjust:exact;}}
@@ -1677,9 +1677,10 @@ def main():
                     @page{{size:A4;margin:10mm;}}
                     @media print{{
                         body{{margin:0;padding:0;font-size:12pt;line-height:1.2;}}
-                        .match-block{{break-inside:avoid;page-break-inside:avoid;margin:0 3mm 12px!important;box-shadow:none!important;border-radius:0!important;overflow:visible!important;background:#fff!important;}}
-                        .match-content{{padding:0!important;}}
-                        .match-title{{font-size:15pt;margin:0 0 5px!important;border-top:1px solid #555;padding-top:6px;}}
+                        .sched-doodles{{inset:auto;top:-10mm;left:-10mm;width:210mm;height:297mm;}}
+                        .match-block{{break-inside:avoid;page-break-inside:avoid;margin:0 3mm 12px!important;border:.75pt solid #888;box-shadow:none!important;border-radius:5px!important;overflow:visible!important;background:#fff!important;}}
+                        .match-content{{padding:6px 8px!important;}}
+                        .match-title{{font-size:15pt;margin:0 0 5px!important;padding:0;}}
                         .match-block table{{margin-bottom:0;}}
                         .match-block th,.match-block td{{border:0!important;border-bottom:.5pt solid #aaa!important;padding:4px 5px!important;background:#fff!important;color:#000!important;vertical-align:middle;}}
                         .match-block thead th{{font-size:11pt;border-bottom:1pt solid #555!important;}}
