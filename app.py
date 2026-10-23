@@ -367,6 +367,20 @@ def compute_same_sex_match_indices(total_matches: int, count: int):
 # --------------------------------------------------------------------------- #
 #  HTML builders                                                              #
 # --------------------------------------------------------------------------- #
+def format_court_preference_icon(limit):
+    arrow, description = {
+        0: ("↑", "Keep upstairs: never assigned a downstairs court."),
+        2: ("↕", "Standard rotation: up to 2 downstairs matches."),
+        4: ("↓", "Keep downstairs: allows up to 4 downstairs matches in two-match stays."),
+    }[limit]
+    description = _html.escape(description, quote=True)
+    return (
+        "<span class='court-preference-icon' style='color:#ff9f43;font-weight:600;"
+        "margin-left:.3em;' "
+        f"title='{description}' role='img' aria-label='{description}'>{arrow}&#xfe0e;</span>"
+    )
+
+
 def format_match_table_html(match_no, groups, court_names, player_names, bench,
                            block_tag=None, downstairs_idx=None, time_label=None,
                            match_offset: int = 0):
@@ -752,6 +766,12 @@ def main():
     # together on small screens while the outer player grid can still stack.
     st.markdown("""
     <style>
+    [class*="st-key-player_controls_"] {
+        gap: .35rem;
+    }
+    .player-control-label {
+        font-size: .875rem; line-height: 1.4;
+    }
     [class*="st-key-player_controls_"] [data-testid="stHorizontalBlock"] {
         flex-wrap: nowrap !important; gap: 0 !important;
     }
@@ -786,7 +806,7 @@ def main():
     </style>
     """, unsafe_allow_html=True)
 
-    def player_court_preference(name, key, default_limit=2, compact=False):
+    def current_court_preference(name, key, default_limit=2):
         # Carry forward choices from the previous version in an existing session.
         if key not in st.session_state:
             previous = st.session_state.get("downstairs_player_preferences", {})
@@ -794,8 +814,11 @@ def main():
             st.session_state[key] = next(
                 label for label, value in court_preferences.items() if value == limit
             )
+        return st.session_state[key]
+
+    def player_court_preference(name, key, default_limit=2, compact=False):
+        current = current_court_preference(name, key, default_limit)
         if compact:
-            current = st.session_state[key]
             with st.popover(
                 f"Court preference for {name}: {current}",
                 help=f"{name}: {current}. {court_help}",
@@ -821,10 +844,19 @@ def main():
                     if idx < len(REGULAR_PLAYERS):
                         p = REGULAR_PLAYERS[idx]
                         with st.container(key=f"player_controls_{idx}"):
+                            current = current_court_preference(
+                                p["name"], f"court_pref_{p['name']}", p["downstairs_limit"]
+                            )
+                            st.markdown(
+                                "<div class='player-control-label'>"
+                                f"{_html.escape(p['name'])}{format_court_preference_icon(court_preferences[current])}"
+                                "</div>", unsafe_allow_html=True,
+                            )
                             skill_col, pref_col = st.columns([1, .2], vertical_alignment="bottom")
                             with skill_col:
                                 p["skill"] = st.number_input(p["name"], 1, 10, p["skill"],
-                                                             key=f"skill_{p['name']}")
+                                                             key=f"skill_{p['name']}",
+                                                             label_visibility="collapsed")
                             with pref_col:
                                 p["downstairs_limit"] = player_court_preference(
                                     p["name"], f"court_pref_{p['name']}", p["downstairs_limit"],
@@ -995,8 +1027,11 @@ def main():
     players_ng = deduplicate_names(raw_ng)
 
     st.markdown("---\n**📋 Final Player List (rest order):**", unsafe_allow_html=True)
-    st.markdown("\n".join(f"{i+1}. {p}" for i, p in enumerate(players_wg)),
-                unsafe_allow_html=True)
+    st.markdown(
+        "\n".join(f"{i+1}. {p}{format_court_preference_icon(limit)}"
+                  for i, (p, limit) in enumerate(zip(players_wg, downstairs_limits))),
+        unsafe_allow_html=True,
+    )
 
     # Totals by gender for selected players
     male_count   = sum(1 for g in genders if g == "M")
