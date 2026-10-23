@@ -772,6 +772,9 @@ def main():
     .player-control-label {
         font-size: .875rem; line-height: 1.4;
     }
+    [class*="st-key-player_controls_"] > [data-testid="stElementContainer"] > [data-testid="stMarkdown"] > [data-testid="stMarkdownContainer"] {
+        margin-bottom: 0;
+    }
     [class*="st-key-player_controls_"] [data-testid="stHorizontalBlock"] {
         flex-wrap: nowrap !important; gap: 0 !important;
     }
