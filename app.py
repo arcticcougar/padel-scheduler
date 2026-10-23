@@ -219,57 +219,124 @@ def identify_downstairs_courts(court_names):
     upstairs_idx = [i for i in range(len(court_names)) if i not in downstairs_idx]
     return downstairs_idx, upstairs_idx
 
-def build_downstairs_rotation(players, total_matches, downstairs_slots, upstairs_slots):
-    """Choose full downstairs groups, balancing rests across the whole session.
+def validate_downstairs_limits(players, total_matches, downstairs_slots, limits=None):
+    """Return stay limits or explain why the selected courts cannot be filled."""
+    limits = [2] * len(players) if limits is None else list(limits)
+    if len(limits) != len(players) or any(n not in (0, 2, 4) for n in limits):
+        raise ValueError("Each player must have a downstairs limit of 0, 2 or 4 matches.")
+    blocks = math.ceil(total_matches / 2)
+    stays = {p: min(limit // 2, blocks) for p, limit in zip(players, limits)}
+    eligible = sum(n > 0 for n in stays.values())
+    if eligible < downstairs_slots:
+        raise ValueError(
+            f"The downstairs courts need {downstairs_slots} available players at a time, "
+            f"but only {eligible} are available. Adjust Keep upstairs, add players, "
+            "or select fewer downstairs courts."
+        )
+    missing = downstairs_slots * blocks - sum(stays.values())
+    if missing > 0:
+        can_extend = sum(limit == 2 for limit in limits) if blocks > 1 else 0
+        if missing <= can_extend:
+            raise ValueError(
+                f"To fill the downstairs courts for all {total_matches} matches, "
+                f"mark at least {missing} more player(s) as Okay with 4 downstairs matches, "
+                "add available players, or select fewer downstairs courts."
+            )
+        raise ValueError(
+            "These players cannot cover all the downstairs matches within their limits. "
+            "Add available players, select fewer downstairs courts, or schedule fewer matches. "
+            "Nobody will be assigned more than four downstairs matches."
+        )
+    return stays
 
-    Each group stays for two matches. Cyclic orders distribute downstairs turns
-    evenly; a small, repeatable search chooses the order with the fairest rests.
+
+def build_downstairs_rotation(players, total_matches, downstairs_slots, upstairs_slots,
+                              limits=None, genders=None, skills=None, enable_skill=False,
+                              skill_wt=20, same_sex_indices=()):
+    """Plan full two-match stays, respecting each player's firm downstairs limit.
+
+    Compare complete session plans for rest fairness and match quality. Preview
+    pairings use the same social/skill/same-sex score as the main match search.
     """
     if not players or total_matches <= 0 or downstairs_slots <= 0:
         return []
-    if downstairs_slots > len(players):
-        raise ValueError("Not enough players to fill the downstairs courts.")
-
+    stay_limits = validate_downstairs_limits(players, total_matches, downstairs_slots, limits)
     blocks = math.ceil(total_matches / 2)
     bench_count = max(0, len(players) - downstairs_slots - upstairs_slots)
-    # Protect the normal rest order for the first two matches where feasible.
     reserve_count = min(2 * bench_count, len(players) - downstairs_slots)
     reserved = set(players[:reserve_count])
     base_order = players[downstairs_slots:] + players[:downstairs_slots]
-    base_order = [p for p in base_order if p not in reserved] + \
-                 [p for p in base_order if p in reserved]
-    orders = [base_order]
     rng = random.Random(0)
+    orders = [base_order]
     for _ in range(127):
         order = players[:]
         rng.shuffle(order)
-        orders.append([p for p in order if p not in reserved] +
-                      [p for p in order if p in reserved])
+        orders.append(order)
 
     best_rotation, best_score = None, None
     for order in orders:
-        rotation = [
-            {order[(block * downstairs_slots + j) % len(order)]
-             for j in range(downstairs_slots)}
-            for block in range(blocks)
-        ]
+        remaining = stay_limits.copy()
+        visits = {p: 0 for p in players}
+        rotation = []
+        for block in range(blocks):
+            eligible = [p for p in order if remaining[p] > 0]
+            priority = {p: i for i, p in enumerate(order)}
+            eligible.sort(key=lambda p: (
+                visits[p], p in reserved if block == 0 else False, priority[p]
+            ))
+            # With two blocks left, enough players with two remaining stays must
+            # play now to leave a full group available for the final block.
+            required_twice = max(0, 2 * downstairs_slots - len(eligible)) \
+                             if blocks - block == 2 else 0
+            required = [p for p in eligible if remaining[p] == 2][:required_twice]
+            group = required + [p for p in eligible if p not in required][:downstairs_slots - len(required)]
+            downstairs = set(group)
+            rotation.append(downstairs)
+            for p in downstairs:
+                remaining[p] -= 1
+                visits[p] += 1
+
         rests = {p: 0 for p in players}
         downstairs_matches = {p: 0 for p in players}
+        tm, om = initialize_matrices(len(players))
+        preview_history = set()
+        preview_rng = random.Random(1)
+        match_quality = 0
         for match_no in range(total_matches):
             downstairs = rotation[match_no // 2]
             upstairs = [p for p in players if p not in downstairs]
-            for p in select_bench_players(upstairs, rests, bench_count):
+            bench = select_bench_players(upstairs, rests, bench_count)
+            for p in bench:
                 rests[p] += 1
             for p in downstairs:
                 downstairs_matches[p] += 1
+            pools = [[p for p in players if p in downstairs],
+                     [p for p in upstairs if p not in bench]]
+            for available in pools:
+                if not available:
+                    continue
+                best_groups, quality = None, float("inf")
+                for _ in range(16):
+                    shuffled = available[:]
+                    preview_rng.shuffle(shuffled)
+                    groups = [tuple(shuffled[i:i+4]) for i in range(0, len(shuffled), 4)]
+                    score = evaluate_match(
+                        groups, tm, om, match_no in same_sex_indices, genders,
+                        available, 4, enable_skill, skills, skill_wt, preview_history,
+                    )
+                    if score < quality:
+                        best_groups, quality = groups, score
+                match_quality += quality
+                update_matrices_for_match(best_groups, tm, om)
+                preview_history.update(canonical_config(g) for g in best_groups)
         rest_counts = list(rests.values())
-        down_counts = list(downstairs_matches.values())
+        down_counts = [downstairs_matches[p] for p in players if stay_limits[p] > 0]
         score = (
             max(rest_counts) - min(rest_counts),
             sum(n * n for n in rest_counts),
-            max(down_counts) - min(down_counts),
             sum(n * n for n in down_counts),
-            sum(len(a & b) for a, b in zip(rotation, rotation[1:])),
+            match_quality,
+            -sum(len(a & b) for a, b in zip(rotation, rotation[1:])),
         )
         if best_score is None or score < best_score:
             best_rotation, best_score = rotation, score
@@ -495,6 +562,7 @@ def generate_Schedule_Statistics(team_mtx, opp_mtx, rest_track, names,
 def assign_matches(names, genders, skills, courts, court_sz=4, total_matches=6,
                    samples=100000, reject_mixed=False, enable_skill=False,
                    skill_wt=20, same_sex_matches_count=0,
+                   downstairs_limits=None,
                    start_dt: datetime | None = None,
                    match_offset: int = 0,
                    header_html: str = "",
@@ -510,14 +578,18 @@ def assign_matches(names, genders, skills, courts, court_sz=4, total_matches=6,
     history = set()
     all_matches = []
 
-    # Downstairs stays are part of the normal schedule whenever both levels are
-    # in use. If every active court is downstairs, normal rests can rotate each
-    # match: nobody needs to walk between levels.
-    rotation = build_downstairs_rotation(
-        players, total_matches, len(down_idx) * court_sz, len(up_idx) * court_sz
-    ) if down_idx and up_idx else None
     eff_same_sex_count = same_sex_matches_count if reject_mixed else 0
     spaced_same_sex = compute_same_sex_match_indices(total_matches, eff_same_sex_count)
+    preferred_indices = spaced_same_sex if same_sex_matches_count > 0 else (
+        range(total_matches) if reject_mixed else []
+    )
+    # Every active downstairs court follows the same eligibility/stay limits,
+    # including sessions with only downstairs courts.
+    rotation = build_downstairs_rotation(
+        players, total_matches, len(down_idx) * court_sz, len(up_idx) * court_sz,
+        limits=downstairs_limits, genders=genders, skills=skills,
+        enable_skill=enable_skill, skill_wt=skill_wt, same_sex_indices=preferred_indices,
+    ) if down_idx else None
 
     for match_no in range(total_matches):
         st.info(f"--- Assigning players for Match {match_no+1+match_offset} ---")
@@ -886,9 +958,9 @@ def main():
     courts_used = determine_courts_to_use(n_sel, len(courts), 4)
     max_unique  = compute_max_unique_matchups(n_sel, courts_used, 4) if n_sel >= courts_used*4 else 0
     active_down, active_up = identify_downstairs_courts(courts[:courts_used])
-    if active_down and active_up:
-        st.caption("Downstairs courts are included automatically. Players stay downstairs "
-                   "for two matches before rotating; everything appears in one schedule.")
+    if active_down:
+        st.caption("Downstairs courts are included automatically in the same schedule, "
+                   "in two-match stays. Match times remain 15 minutes apart.")
     if courts_used < len(courts):
         st.caption(f"With {n_sel} players, the first {courts_used} selected courts can be filled.")
 
@@ -896,6 +968,48 @@ def main():
     total_matches = st.number_input("🔢 Matches per schedule", 1, value=6)
     num_sched     = st.number_input("🗂 Number of schedules", 1, value=1)
     default_samples = int(min(max_unique, 200_000)) if max_unique else 200_000
+
+    downstairs_preferences = st.session_state.setdefault("downstairs_player_preferences", {})
+    downstairs_error = None
+    if active_down:
+        with st.expander("Downstairs players (optional)", expanded=True):
+            st.caption("Everyone can play up to 2 downstairs matches unless marked below. "
+                       "Players who agree can play up to 4; nobody plays 6 downstairs matches.")
+
+            def _save_downstairs_preferences():
+                keep = set(st.session_state.get("downstairs_keep_upstairs", []))
+                four = set(st.session_state.get("downstairs_allow_four", []))
+                for name in players_ng:
+                    downstairs_preferences[name] = 0 if name in keep else (4 if name in four else 2)
+
+            # Seed from per-player preferences before creating the controls so
+            # changing the selected roster does not discard everybody's choices.
+            st.session_state["downstairs_keep_upstairs"] = [
+                n for n in players_ng if downstairs_preferences.get(n, 2) == 0
+            ]
+            keep_upstairs = st.multiselect(
+                "Keep upstairs", players_ng, key="downstairs_keep_upstairs",
+                on_change=_save_downstairs_preferences,
+                help="These players will never be assigned a downstairs court.",
+            )
+            four_options = [n for n in players_ng if n not in keep_upstairs]
+            st.session_state["downstairs_allow_four"] = [
+                n for n in four_options if downstairs_preferences.get(n, 2) == 4
+            ]
+            allow_four = st.multiselect(
+                "Okay with 4 downstairs matches", four_options,
+                key="downstairs_allow_four", on_change=_save_downstairs_preferences,
+                help="Allows up to two stays of two matches. Four is the maximum, not a requirement.",
+            )
+        try:
+            validate_downstairs_limits(
+                list(range(n_sel)), total_matches, len(active_down) * 4,
+                [downstairs_preferences.get(n, 2) for n in players_ng],
+            )
+        except ValueError as exc:
+            downstairs_error = str(exc)
+            st.warning(downstairs_error)
+    downstairs_limits = [downstairs_preferences.get(n, 2) for n in players_ng]
     
 
     reject_mixed = st.checkbox("🏳️‍🌈 Prefer Same-Sex Play", value=False)
@@ -1207,7 +1321,7 @@ def main():
                 )
 
     # ------------- generate button -----------------------
-    if st.button("📅 Generate Schedule(s)"):
+    if st.button("📅 Generate Schedule(s)", disabled=downstairs_error is not None):
         if n_sel < 4:
             st.error("Need at least 4 players."); st.stop()
         if not courts:
@@ -1226,6 +1340,7 @@ def main():
                     reject_mixed=reject_mixed, enable_skill=enable_skill,
                     skill_wt=skill_wt,
                     same_sex_matches_count=same_sex_matches_count,
+                    downstairs_limits=downstairs_limits,
                     start_dt=datetime.combine(sess_date, sess_time),
                     match_offset=max(0, int(start_match_number) - 1),
                     header_html=(
@@ -1276,7 +1391,13 @@ def main():
                 cfg_same_sex_matches = ", ".join(str(i+1 + max(0, int(start_match_number) - 1)) for i in spaced_same_sex) if spaced_same_sex else ("0")
                 cfg_skill = "Yes" if enable_skill else "No"
                 active_down, active_up = identify_downstairs_courts(courts[:used])
-                cfg_down = "Automatic (two-match stays)" if active_down and active_up else "No"
+                cfg_down = "Automatic (two-match stays, maximum 4 per player)" if active_down else "No"
+                cfg_keep = ", ".join(_html.escape(n) for n, limit in zip(players_ng, downstairs_limits) if limit == 0) or "None"
+                cfg_four = ", ".join(_html.escape(n) for n, limit in zip(players_ng, downstairs_limits) if limit == 4) or "None"
+                cfg_preferences = (
+                    f"<li>Keep upstairs: {cfg_keep}</li>"
+                    f"<li>Okay with 4 downstairs matches: {cfg_four}</li>"
+                ) if active_down else ""
                 cfg_html = (
                     f"<div style='background:#eef6ff;border:1px solid #cce0ff;padding:10px;border-radius:8px;margin-bottom:10px;'>"
                     f"<h3 style='margin:0 0 8px 0;'>Configuration</h3>"
@@ -1284,6 +1405,7 @@ def main():
                     f"<li>Skill-based: {cfg_skill}</li>"
                     f"<li>Same-sex preferred: {cfg_same_sex} (matches: {cfg_same_sex_matches})</li>"
                     f"<li>Downstairs rotation (12/13): {cfg_down}</li>"
+                    f"{cfg_preferences}"
                     f"</ul></div>"
                 )
                 stats_html = stats_html.replace(
