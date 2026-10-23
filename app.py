@@ -1,6 +1,6 @@
 ###############################################################################
 #  Mijas Padellers Match Scheduler – Streamlit application                    #
-#  Last updated: 23 Oct 2026 – Downstairs courts integrated automatically    #
+#  Last updated: 23 Oct 2026 – Combined player skills and court preferences    #
 ###############################################################################
 import streamlit as st
 import itertools
@@ -239,7 +239,8 @@ def validate_downstairs_limits(players, total_matches, downstairs_slots, limits=
         if missing <= can_extend:
             raise ValueError(
                 f"To fill the downstairs courts for all {total_matches} matches, "
-                f"mark at least {missing} more player(s) as Okay with 4 downstairs matches, "
+                f"mark at least {missing} more {'player' if missing == 1 else 'players'} as Keep downstairs "
+                "in the player adjustments above, "
                 "add available players, or select fewer downstairs courts."
             )
         raise ValueError(
@@ -674,76 +675,99 @@ def main():
     st.write("Selected date:", date_str, "at", sess_time.strftime("%H:%M"))
 
     # ----------------- player master list ---------------
+    # Permanent court defaults: 2 = Standard rotation, 0 = Keep upstairs,
+    # 4 = Keep downstairs (up to four matches, in two-match stays).
     REGULAR_PLAYERS = [
-        {"name": "Aideen", "gender": "F", "skill": 5},
-        {"name": "Anna", "gender": "F", "skill": 5},
-        {"name": "Anne", "gender": "F", "skill": 4},
-        {"name": "Asmo", "gender": "M", "skill": 7},
-        {"name": "Bevan", "gender": "M", "skill": 5},
-        {"name": "Chris", "gender": "M", "skill": 7},
-        {"name": "Christine", "gender": "F", "skill": 5},
-        {"name": "Collin", "gender": "M", "skill": 6},
-        {"name": "Cris B.", "gender": "F", "skill": 5},
-        {"name": "Daryoush", "gender": "M", "skill": 6},
-        {"name": "Dave", "gender": "M", "skill": 7},
-        {"name": "Declan", "gender": "M", "skill": 7},
-        {"name": "Dee", "gender": "F", "skill": 4},
-        {"name": "Eugene", "gender": "M", "skill": 6},
-        {"name": "Geordie", "gender": "M", "skill": 7},
-        {"name": "Gregor", "gender": "M", "skill": 7},
-        {"name": "Glynis", "gender": "F", "skill": 4},
-        {"name": "Heather", "gender": "F", "skill": 5},
-        {"name": "Janet", "gender": "F", "skill": 5},
-        {"name": "John F.", "gender": "M", "skill": 7},
-        {"name": "John S.", "gender": "M", "skill": 7},
-        {"name": "Joyce", "gender": "F", "skill": 5},
-        {"name": "Judy", "gender": "F", "skill": 6},
-        {"name": "Julia", "gender": "F", "skill": 4},
-        {"name": "Julie", "gender": "F", "skill": 4},
-        {"name": "Katty", "gender": "F", "skill": 5},
-        {"name": "Kevan", "gender": "M", "skill": 5},
-        {"name": "Kim", "gender": "F", "skill": 6},
-        {"name": "Linda", "gender": "F", "skill": 6},
-        {"name": "Lindsey", "gender": "F", "skill": 5},
-        {"name": "Louise", "gender": "F", "skill": 5},
-        {"name": "Lynn", "gender": "F", "skill": 4},
-        {"name": "Lynsey", "gender": "F", "skill": 4},
-        {"name": "Maria", "gender": "F", "skill": 5},
-        {"name": "Melvyn", "gender": "M", "skill": 6},
-        {"name": "Mieke", "gender": "F", "skill": 6},
-        {"name": "Mike", "gender": "M", "skill": 7},
-        {"name": "Norman", "gender": "M", "skill": 6},
-        {"name": "Outi", "gender": "F", "skill": 6},
-        {"name": "Paul", "gender": "M", "skill": 7},
-        {"name": "Pieter", "gender": "M", "skill": 7},
-        {"name": "Ray", "gender": "M", "skill": 7},
-        {"name": "Roger", "gender": "M", "skill": 6},
-        {"name": "Ronan", "gender": "M", "skill": 7},
-        {"name": "Ruth", "gender": "F", "skill": 5},
-        {"name": "Sandy", "gender": "F", "skill": 5},
-        {"name": "Sarah M", "gender": "F", "skill": 5},
-        {"name": "Sarah R", "gender": "F", "skill": 5},
-        {"name": "Scott", "gender": "M", "skill": 7},
-        {"name": "Sharon", "gender": "F", "skill": 4},
-        {"name": "Soraya", "gender": "F", "skill": 6},
-        {"name": "Sue", "gender": "F", "skill": 5},
-        {"name": "Tania", "gender": "F", "skill": 6},
-        {"name": "Tony", "gender": "M", "skill": 7},
-        {"name": "Travis", "gender": "M", "skill": 7},
-        {"name": "Vic", "gender": "M", "skill": 6},
-        {"name": "Walker", "gender": "M", "skill": 7},
-        {"name": "Wendy", "gender": "F", "skill": 4},
+        {"name": "Aideen", "gender": "F", "skill": 5, "downstairs_limit": 2},
+        {"name": "Anna", "gender": "F", "skill": 5, "downstairs_limit": 2},
+        {"name": "Anne", "gender": "F", "skill": 4, "downstairs_limit": 2},
+        {"name": "Asmo", "gender": "M", "skill": 7, "downstairs_limit": 2},
+        {"name": "Bevan", "gender": "M", "skill": 5, "downstairs_limit": 2},
+        {"name": "Chris", "gender": "M", "skill": 7, "downstairs_limit": 2},
+        {"name": "Christine", "gender": "F", "skill": 5, "downstairs_limit": 2},
+        {"name": "Collin", "gender": "M", "skill": 6, "downstairs_limit": 2},
+        {"name": "Cris B.", "gender": "F", "skill": 5, "downstairs_limit": 2},
+        {"name": "Daryoush", "gender": "M", "skill": 6, "downstairs_limit": 2},
+        {"name": "Dave", "gender": "M", "skill": 7, "downstairs_limit": 2},
+        {"name": "Declan", "gender": "M", "skill": 7, "downstairs_limit": 2},
+        {"name": "Dee", "gender": "F", "skill": 4, "downstairs_limit": 2},
+        {"name": "Eugene", "gender": "M", "skill": 6, "downstairs_limit": 2},
+        {"name": "Geordie", "gender": "M", "skill": 7, "downstairs_limit": 2},
+        {"name": "Gregor", "gender": "M", "skill": 7, "downstairs_limit": 2},
+        {"name": "Glynis", "gender": "F", "skill": 4, "downstairs_limit": 2},
+        {"name": "Heather", "gender": "F", "skill": 5, "downstairs_limit": 2},
+        {"name": "Janet", "gender": "F", "skill": 5, "downstairs_limit": 2},
+        {"name": "John F.", "gender": "M", "skill": 7, "downstairs_limit": 2},
+        {"name": "John S.", "gender": "M", "skill": 7, "downstairs_limit": 2},
+        {"name": "Joyce", "gender": "F", "skill": 5, "downstairs_limit": 2},
+        {"name": "Judy", "gender": "F", "skill": 6, "downstairs_limit": 2},
+        {"name": "Julia", "gender": "F", "skill": 4, "downstairs_limit": 2},
+        {"name": "Julie", "gender": "F", "skill": 4, "downstairs_limit": 2},
+        {"name": "Katty", "gender": "F", "skill": 5, "downstairs_limit": 2},
+        {"name": "Kevan", "gender": "M", "skill": 5, "downstairs_limit": 2},
+        {"name": "Kim", "gender": "F", "skill": 6, "downstairs_limit": 2},
+        {"name": "Linda", "gender": "F", "skill": 6, "downstairs_limit": 2},
+        {"name": "Lindsey", "gender": "F", "skill": 5, "downstairs_limit": 2},
+        {"name": "Louise", "gender": "F", "skill": 5, "downstairs_limit": 2},
+        {"name": "Lynn", "gender": "F", "skill": 4, "downstairs_limit": 2},
+        {"name": "Lynsey", "gender": "F", "skill": 4, "downstairs_limit": 2},
+        {"name": "Maria", "gender": "F", "skill": 5, "downstairs_limit": 2},
+        {"name": "Melvyn", "gender": "M", "skill": 6, "downstairs_limit": 2},
+        {"name": "Mieke", "gender": "F", "skill": 6, "downstairs_limit": 2},
+        {"name": "Mike", "gender": "M", "skill": 7, "downstairs_limit": 2},
+        {"name": "Norman", "gender": "M", "skill": 6, "downstairs_limit": 2},
+        {"name": "Outi", "gender": "F", "skill": 6, "downstairs_limit": 2},
+        {"name": "Paul", "gender": "M", "skill": 7, "downstairs_limit": 2},
+        {"name": "Pieter", "gender": "M", "skill": 7, "downstairs_limit": 2},
+        {"name": "Ray", "gender": "M", "skill": 7, "downstairs_limit": 2},
+        {"name": "Roger", "gender": "M", "skill": 6, "downstairs_limit": 2},
+        {"name": "Ronan", "gender": "M", "skill": 7, "downstairs_limit": 2},
+        {"name": "Ruth", "gender": "F", "skill": 5, "downstairs_limit": 2},
+        {"name": "Sandy", "gender": "F", "skill": 5, "downstairs_limit": 2},
+        {"name": "Sarah M", "gender": "F", "skill": 5, "downstairs_limit": 2},
+        {"name": "Sarah R", "gender": "F", "skill": 5, "downstairs_limit": 2},
+        {"name": "Scott", "gender": "M", "skill": 7, "downstairs_limit": 2},
+        {"name": "Sharon", "gender": "F", "skill": 4, "downstairs_limit": 2},
+        {"name": "Soraya", "gender": "F", "skill": 6, "downstairs_limit": 2},
+        {"name": "Sue", "gender": "F", "skill": 5, "downstairs_limit": 2},
+        {"name": "Tania", "gender": "F", "skill": 6, "downstairs_limit": 2},
+        {"name": "Tony", "gender": "M", "skill": 7, "downstairs_limit": 2},
+        {"name": "Travis", "gender": "M", "skill": 7, "downstairs_limit": 2},
+        {"name": "Vic", "gender": "M", "skill": 6, "downstairs_limit": 2},
+        {"name": "Walker", "gender": "M", "skill": 7, "downstairs_limit": 2},
+        {"name": "Wendy", "gender": "F", "skill": 4, "downstairs_limit": 2},
     ]
     REGULAR_PLAYERS = sorted(REGULAR_PLAYERS, key=lambda x: x["name"])
 
-    # ------------ skill adjustments (optional) ------------
+    # ------------ today's player adjustments (optional) ------------
+    court_preferences = {"Standard rotation": 2, "Keep upstairs": 0, "Keep downstairs": 4}
+    court_labels = list(court_preferences)
+    court_help = (
+        "Standard rotation: up to 2 downstairs matches. "
+        "Keep upstairs: never assigned a downstairs court. "
+        "Keep downstairs: allows up to 4 downstairs matches in two-match stays. "
+        "The scheduler chooses how many are needed; nobody plays 6 downstairs matches."
+    )
+
+    def player_court_preference(name, key, default_limit=2):
+        # Carry forward choices from the previous version in an existing session.
+        if key not in st.session_state:
+            previous = st.session_state.get("downstairs_player_preferences", {})
+            limit = previous.get(name, default_limit)
+            st.session_state[key] = next(
+                label for label, value in court_preferences.items() if value == limit
+            )
+        choice = st.selectbox("Court preference", court_labels, key=key, help=court_help)
+        return court_preferences[choice]
+
     st.header("👥 Select Regular Players")
-    with st.expander("⚙️ Adjust Regular Player Skill Levels "
-                     "(temporary). Speak to Scott for permanent changes.",
+    with st.expander("⚙️ Adjust Regular Player Skills & Court Preferences (today)",
                      expanded=False):
-        cols_s  = st.columns(4)
-        per_col = math.ceil(len(REGULAR_PLAYERS) / 4)
-        for c in range(4):
+        st.caption("Change a player's skill or court preference for today's schedule. "
+                   "New sessions start from the saved defaults; speak to Scott for permanent changes.")
+        cols_s = st.columns(3)
+        per_col = math.ceil(len(REGULAR_PLAYERS) / 3)
+        for c in range(3):
             with cols_s[c]:
                 for r in range(per_col):
                     idx = c * per_col + r
@@ -751,6 +775,9 @@ def main():
                         p = REGULAR_PLAYERS[idx]
                         p["skill"] = st.number_input(p["name"], 1, 10, p["skill"],
                                                      key=f"skill_{p['name']}")
+                        p["downstairs_limit"] = player_court_preference(
+                            p["name"], f"court_pref_{p['name']}", p["downstairs_limit"]
+                        )
 
         # ------- live grouped-by-skill summary (inside expander) -------
         st.markdown("**📊 Current Regulars Grouped by Skill (live):**", unsafe_allow_html=True)
@@ -792,6 +819,7 @@ def main():
             st.session_state[f"g_nm_{gi}"] = ""
             st.session_state[f"g_gen_{gi}"] = "F"
             st.session_state[f"g_sk_{gi}"] = 5
+            st.session_state[f"g_court_pref_{gi}"] = "Standard rotation"
 
         # Clear custom courts
         for i in range(4):
@@ -851,10 +879,12 @@ def main():
     with st.expander("➕ Add Up to 8 Guest Players (optional)", expanded=False):
         guest_players = []
         for gi in range(8):
-            cn, cg, cs = st.columns([2, 1, 1])
+            cn, cg, cs, cp = st.columns([2, 1, 1, 2])
             gname  = cn.text_input(f"Guest Player {gi+1}", key=f"g_nm_{gi}")
             ggen   = cg.radio("", ["F", "M"], horizontal=True, key=f"g_gen_{gi}")
             gskill = cs.number_input("Skill", 1, 10, 5, key=f"g_sk_{gi}")
+            with cp:
+                glimit = player_court_preference(gname.strip(), f"g_court_pref_{gi}")
 
             if gname.strip():
                 name = gname.strip()
@@ -862,7 +892,7 @@ def main():
                 if st.session_state["player_selection_order"].get(name) is None:
                     st.session_state["player_selection_order"][name] = st.session_state["player_counter"]
                     st.session_state["player_counter"] += 1
-                guest_players.append((name, ggen, gskill))
+                guest_players.append((name, ggen, gskill, glimit))
             else:
                 # if the box was cleared, drop it from the order map
                 prior = st.session_state["player_selection_order"].get(gname.strip())
@@ -886,7 +916,7 @@ def main():
     sel_names = [n for n, _ in ordered]   # ✅ regulars + guests in true entry order
 
     # assemble final player arrays
-    raw_wg, raw_ng, genders, skills = [], [], [], []
+    raw_wg, raw_ng, genders, skills, downstairs_limits = [], [], [], [], []
     for n in sel_names:
         # is it a regular?
         reg = next((x for x in REGULAR_PLAYERS if x["name"] == n), None)
@@ -897,12 +927,14 @@ def main():
             raw_wg.append(f"{p['name']} {sym}")
             raw_ng.append(p["name"])
             genders.append(p["gender"]); skills.append(p["skill"])
+            downstairs_limits.append(p["downstairs_limit"])
         else:
             g = next(x for x in guest_players if x[0] == n)
             sym = "<span style='color:magenta;font-weight:bold;'>♀</span>" if g[1] == "F" \
                   else "<span style='color:cyan;font-weight:bold;'>♂</span>"
             raw_wg.append(f"{g[0]} {sym}"); raw_ng.append(g[0])
             genders.append(g[1]); skills.append(g[2])
+            downstairs_limits.append(g[3])
 
     if len({x.lower() for x in raw_ng}) < len(raw_ng):
         st.error("Duplicate player names detected."); st.stop()
@@ -969,48 +1001,17 @@ def main():
     num_sched     = st.number_input("🗂 Number of schedules", 1, value=1)
     default_samples = int(min(max_unique, 200_000)) if max_unique else 200_000
 
-    downstairs_preferences = st.session_state.setdefault("downstairs_player_preferences", {})
     downstairs_error = None
     if active_down:
-        with st.expander("Downstairs players (optional)", expanded=True):
-            st.caption("Everyone can play up to 2 downstairs matches unless marked below. "
-                       "Players who agree can play up to 4; nobody plays 6 downstairs matches.")
-
-            def _save_downstairs_preferences():
-                keep = set(st.session_state.get("downstairs_keep_upstairs", []))
-                four = set(st.session_state.get("downstairs_allow_four", []))
-                for name in players_ng:
-                    downstairs_preferences[name] = 0 if name in keep else (4 if name in four else 2)
-
-            # Seed from per-player preferences before creating the controls so
-            # changing the selected roster does not discard everybody's choices.
-            st.session_state["downstairs_keep_upstairs"] = [
-                n for n in players_ng if downstairs_preferences.get(n, 2) == 0
-            ]
-            keep_upstairs = st.multiselect(
-                "Keep upstairs", players_ng, key="downstairs_keep_upstairs",
-                on_change=_save_downstairs_preferences,
-                help="These players will never be assigned a downstairs court.",
-            )
-            four_options = [n for n in players_ng if n not in keep_upstairs]
-            st.session_state["downstairs_allow_four"] = [
-                n for n in four_options if downstairs_preferences.get(n, 2) == 4
-            ]
-            allow_four = st.multiselect(
-                "Okay with 4 downstairs matches", four_options,
-                key="downstairs_allow_four", on_change=_save_downstairs_preferences,
-                help="Allows up to two stays of two matches. Four is the maximum, not a requirement.",
-            )
+        st.caption("To change who goes downstairs, open Adjust Regular Player Skills & Court "
+                   "Preferences above. Guest preferences are beside each guest's details.")
         try:
             validate_downstairs_limits(
-                list(range(n_sel)), total_matches, len(active_down) * 4,
-                [downstairs_preferences.get(n, 2) for n in players_ng],
+                list(range(n_sel)), total_matches, len(active_down) * 4, downstairs_limits,
             )
         except ValueError as exc:
             downstairs_error = str(exc)
             st.warning(downstairs_error)
-    downstairs_limits = [downstairs_preferences.get(n, 2) for n in players_ng]
-    
 
     reject_mixed = st.checkbox("🏳️‍🌈 Prefer Same-Sex Play", value=False)
     # Only show the count input when same-sex mode is enabled.
@@ -1396,7 +1397,7 @@ def main():
                 cfg_four = ", ".join(_html.escape(n) for n, limit in zip(players_ng, downstairs_limits) if limit == 4) or "None"
                 cfg_preferences = (
                     f"<li>Keep upstairs: {cfg_keep}</li>"
-                    f"<li>Okay with 4 downstairs matches: {cfg_four}</li>"
+                    f"<li>Keep downstairs (up to 4 matches): {cfg_four}</li>"
                 ) if active_down else ""
                 cfg_html = (
                     f"<div style='background:#eef6ff;border:1px solid #cce0ff;padding:10px;border-radius:8px;margin-bottom:10px;'>"
