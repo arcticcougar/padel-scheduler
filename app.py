@@ -41,6 +41,25 @@ div[data-testid="stProgressBar"] { margin: 2px 0; padding: 2px 0; }
     padding: .5rem .75rem; min-height: 2.5rem;
 }
 [data-testid="stExpanderDetails"] { padding: .6rem; }
+/* Keep the existing dense grid, with a clear selectable row and keyboard focus. */
+:is(.st-key-regular_player_grid, .st-key-regular_court_grid) [data-testid="stCheckbox"] label {
+    box-sizing: border-box; width: 100%; min-height: 1.5rem;
+    padding: 0 .375rem; border: 0; border-radius: .375rem;
+    align-items: center; background: rgba(128, 128, 128, .035);
+}
+:is(.st-key-regular_player_grid, .st-key-regular_court_grid) [data-testid="stCheckbox"] label:hover {
+    background: rgba(128, 128, 128, .1);
+}
+:is(.st-key-regular_player_grid, .st-key-regular_court_grid) [data-testid="stCheckbox"] label:has(input:checked) {
+    background: rgba(59, 130, 246, .12);
+    box-shadow: inset 0 0 0 1px rgba(59, 130, 246, .6);
+}
+:is(.st-key-regular_player_grid, .st-key-regular_court_grid) [data-testid="stCheckbox"] label:has(input:checked) p {
+    font-weight: 600;
+}
+:is(.st-key-regular_player_grid, .st-key-regular_court_grid) [data-testid="stCheckbox"] label:has(input:focus-visible) {
+    outline: 2px solid #60a5fa; outline-offset: 2px;
+}
 @media (max-width: 640px) {
     .st-key-regular_player_grid > [data-testid="stHorizontalBlock"],
     .st-key-regular_court_grid > [data-testid="stHorizontalBlock"] {
