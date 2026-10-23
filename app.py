@@ -66,6 +66,13 @@ div[data-testid="stProgressBar"] { margin: 2px 0; padding: 2px 0; }
     outline: 2px solid #60a5fa; outline-offset: 2px;
 }
 @media (max-width: 640px) {
+    /* Give mobile options a forgiving tap area, including guest and court radios. */
+    [data-testid="stCheckbox"] label {
+        min-height: 2.75rem; width: 100%; align-items: center;
+    }
+    [data-testid="stRadio"] label[data-baseweb="radio"] {
+        min-height: 2.75rem; min-width: 2.75rem; align-items: center;
+    }
     [class*="st-key-guest_controls_"] > [data-testid="stHorizontalBlock"] {
         display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
         gap: .5rem .75rem;
