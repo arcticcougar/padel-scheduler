@@ -820,8 +820,7 @@ def assign_matches(names, genders, skills, courts, court_sz=4, total_matches=6,
             if repeat_header_html:
                 html_blocks.append(repeat_header_html)
         slot_start = base_dt + timedelta(minutes=15 * idx)
-        slot_end = slot_start + timedelta(minutes=15)
-        time_label = f"{slot_start.strftime('%H:%M')}-{slot_end.strftime('%H:%M')}"
+        time_label = slot_start.strftime('%H:%M')
         html_blocks.append(format_match_table_html(
             idx, groups, active_courts, names, bench,
             downstairs_idx=down_idx, time_label=time_label,
