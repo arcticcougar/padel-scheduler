@@ -67,7 +67,7 @@ div[data-testid="stProgressBar"] { margin: 2px 0; padding: 2px 0; }
 }
 @media (max-width: 640px) {
     /* Give mobile options a forgiving tap area, including guest and court radios. */
-    [data-testid="stCheckbox"] label {
+    [data-testid="stCheckbox"] label[data-baseweb="checkbox"] {
         min-height: 2.75rem; width: 100%; align-items: center;
     }
     [data-testid="stRadio"] label[data-baseweb="radio"] {
