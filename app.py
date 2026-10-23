@@ -913,7 +913,7 @@ def main():
                     names_for_preference.append(
                         f"{_html.escape(p['name'])} {sym}{format_court_preference_icon(limit)}"
                     )
-            st.markdown(f"**{label}:**")
+            st.markdown(f"<b><u>{label}:</u></b>", unsafe_allow_html=True)
             st.markdown(
                 ", ".join(names_for_preference) or "None",
                 unsafe_allow_html=True,
