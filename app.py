@@ -368,14 +368,14 @@ def compute_same_sex_match_indices(total_matches: int, count: int):
 #  HTML builders                                                              #
 # --------------------------------------------------------------------------- #
 def format_court_preference_icon(limit):
-    arrow, description = {
-        0: ("↑", "Keep upstairs: never assigned a downstairs court."),
-        2: ("↕", "Standard rotation: up to 2 downstairs matches."),
-        4: ("↓", "Keep downstairs: allows up to 4 downstairs matches in two-match stays."),
+    arrow, colour, description = {
+        0: ("↑", "#facc15", "Keep upstairs: never assigned a downstairs court."),
+        2: ("↕", "#ff9f43", "Standard rotation: up to 2 downstairs matches."),
+        4: ("↓", "#ff4b4b", "Keep downstairs: allows up to 4 downstairs matches in two-match stays."),
     }[limit]
     description = _html.escape(description, quote=True)
     return (
-        "<span class='court-preference-icon' style='color:#ff9f43;font-weight:600;"
+        f"<span class='court-preference-icon' style='color:{colour};font-weight:600;"
         "margin-left:.3em;' "
         f"title='{description}' role='img' aria-label='{description}'>{arrow}&#xfe0e;</span>"
     )
