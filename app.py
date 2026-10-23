@@ -574,7 +574,7 @@ def format_match_table_html(match_no, groups, court_names, player_names, bench,
         badge = " <span class='downstairs-badge' style='background:#222;color:#fff;border-radius:6px;padding:2px 6px;font-size:.8em;-webkit-print-color-adjust:exact;print-color-adjust:exact;'>Downstairs</span>" if is_down else ""
         html += f"""
             <tr style="background:{row_bg};">
-              <td style="width:20%;padding:6px;border-bottom:1px solid #ddd;">{court_names[cid]}{badge}</td>
+              <td style="width:20%;padding:6px;border-bottom:1px solid #ddd;"><span class="court-label"><span>{court_names[cid]}</span>{badge}</span></td>
               <td style="width:30%;padding:6px;border-bottom:1px solid #ddd;">{t1}</td>
               <td style="width:10%;padding:6px;border-bottom:1px solid #ddd;text-align:center;">vs</td>
               <td style="width:30%;padding:6px;border-bottom:1px solid #ddd;">{t2}</td>
@@ -1685,12 +1685,13 @@ def main():
                         .match-block thead th:nth-child(2),.match-block tbody td:nth-child(2){{text-align:right!important;}}
                         .match-block tr{{break-inside:avoid;background:#fff!important;}}
                         .match-block tfoot td{{font-size:11pt;border-bottom:0!important;}}
+                        .court-label{{display:inline-flex;align-items:center;gap:4px;flex-wrap:wrap;}}
                         .sched-title{{font-size:18pt;}}
                         .sched-date{{font-size:12pt;}}
                         .sched-focus{{padding:0;margin-bottom:8px;}}
                         .sched-focus-inner{{background:#fff!important;border:.6pt solid #777;border-radius:0;padding:6px 8px;color:#000;}}
                         .sched-focus-head,.sched-focus-body{{font-size:11pt;color:#000;}}
-                        .downstairs-badge{{background:#fff!important;color:#000!important;border:.6pt solid #555;border-radius:2px;padding:1px 4px!important;font-size:8.5pt!important;-webkit-print-color-adjust:economy;print-color-adjust:economy;}}
+                        .downstairs-badge{{background:#fff!important;color:#000!important;border:.6pt solid #555;border-radius:2px;padding:1px 4px!important;font-size:8.5pt!important;line-height:1;white-space:nowrap;-webkit-print-color-adjust:economy;print-color-adjust:economy;}}
                     }}
                 </style></head><body>{schedule_background_html()}<div class='container'>
                 {sched_html}
