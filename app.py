@@ -478,10 +478,10 @@ def format_match_table_html(match_no, groups, court_names, player_names, bench,
     blk = f" – Block {block_tag}" if block_tag else ""
     time_str = f" [{time_label}]" if time_label else ""
     html = f"""
-    <div style="margin-bottom:10px;box-shadow:0 2px 4px rgba(0,0,0,.1);
+    <div class="match-block" style="margin-bottom:10px;box-shadow:0 2px 4px rgba(0,0,0,.1);
                 border-radius:8px;overflow:hidden;background:#fff;">
-      <div style="padding:10px;">
-        <h2 style="text-align:center;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;
+      <div class="match-content" style="padding:10px;">
+        <h2 class="match-title" style="text-align:center;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;
                    margin:0 0 10px 0;">Match {match_no+1+match_offset}{time_str}{blk}</h2>
         <table style="width:100%;border-collapse:collapse;table-layout:fixed;
                       font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;">
@@ -1595,7 +1595,24 @@ def main():
                     .sched-focus-head{{font-weight:800;font-size:1.05em;margin:0 0 4px 0;}}
                     .sched-focus-body{{margin:0;color:#222;}}
                     .downstairs-badge{{background:#222;color:#fff;border-radius:6px;padding:2px 6px;font-size:.8em;-webkit-print-color-adjust:exact;print-color-adjust:exact;}}
-                    @media print{{body{{margin:0;padding:0;}} .downstairs-badge{{-webkit-print-color-adjust:exact;print-color-adjust:exact;background:#000;color:#fff;}}}}
+                    @page{{size:A4;margin:10mm;}}
+                    @media print{{
+                        body{{margin:0;padding:0;font-size:12pt;line-height:1.2;}}
+                        .match-block{{break-inside:avoid;page-break-inside:avoid;margin-bottom:8px!important;box-shadow:none!important;border-radius:0!important;overflow:visible!important;}}
+                        .match-content{{padding:0!important;}}
+                        .match-title{{font-size:15pt;margin:0 0 5px!important;border-top:1px solid #555;padding-top:6px;}}
+                        .match-block table{{margin-bottom:0;}}
+                        .match-block th,.match-block td{{border:0!important;border-bottom:.5pt solid #aaa!important;padding:4px 5px!important;background:#fff!important;color:#000!important;vertical-align:middle;}}
+                        .match-block thead th{{font-size:11pt;border-bottom:1pt solid #555!important;}}
+                        .match-block tr{{break-inside:avoid;background:#fff!important;}}
+                        .match-block tfoot td{{font-size:11pt;border-bottom:0!important;}}
+                        .sched-title{{font-size:18pt;}}
+                        .sched-date{{font-size:12pt;}}
+                        .sched-focus{{padding:0;margin-bottom:8px;}}
+                        .sched-focus-inner{{background:#fff!important;border:.6pt solid #777;border-radius:0;padding:6px 8px;color:#000;}}
+                        .sched-focus-head,.sched-focus-body{{font-size:11pt;color:#000;}}
+                        .downstairs-badge{{background:#fff!important;color:#000!important;border:.6pt solid #555;border-radius:2px;padding:1px 4px!important;font-size:8.5pt!important;-webkit-print-color-adjust:economy;print-color-adjust:economy;}}
+                    }}
                 </style></head><body><div class='container'>
                 {sched_html}
                 </div></body></html>"""
