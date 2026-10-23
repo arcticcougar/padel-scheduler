@@ -903,17 +903,19 @@ def main():
                 st.markdown(", ".join(names_for_skill), unsafe_allow_html=True)
                 st.markdown("&nbsp;", unsafe_allow_html=True)
 
-        st.markdown("**Current Regulars by Court Preference (live):**")
+        st.markdown("**Current Regulars by Court Preference:**")
         for limit, label in ((0, "Keep upstairs"), (4, "Keep downstairs (up to 4 matches)")):
             names_for_preference = []
             for p in REGULAR_PLAYERS:
                 if p["downstairs_limit"] == limit:
                     sym = "<span style='color:magenta;'>♀</span>" if p["gender"] == "F" \
                           else "<span style='color:cyan;'>♂</span>"
-                    names_for_preference.append(f"{_html.escape(p['name'])} {sym}")
+                    names_for_preference.append(
+                        f"{_html.escape(p['name'])} {sym}{format_court_preference_icon(limit)}"
+                    )
+            st.markdown(f"**{label}:**")
             st.markdown(
-                f"{format_court_preference_icon(limit)} **{label}:** "
-                + (", ".join(names_for_preference) or "None"),
+                ", ".join(names_for_preference) or "None",
                 unsafe_allow_html=True,
             )
 
