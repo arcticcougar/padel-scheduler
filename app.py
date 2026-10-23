@@ -1688,7 +1688,7 @@ def main():
                         .court-label{{display:inline-flex;align-items:center;gap:4px;flex-wrap:wrap;}}
                         .sched-title{{font-size:18pt;}}
                         .sched-date{{font-size:12pt;}}
-                        .sched-focus{{padding:0;margin-bottom:8px;}}
+                        .sched-focus{{padding:0;margin:0 3mm 8px;}}
                         .sched-focus-inner{{background:#fff!important;border:.6pt solid #777;border-radius:0;padding:6px 8px;color:#000;}}
                         .sched-focus-head,.sched-focus-body{{font-size:11pt;color:#000;}}
                         .downstairs-badge{{background:#fff!important;color:#000!important;border:.6pt solid #555;border-radius:2px;padding:1px 4px!important;font-size:8.5pt!important;line-height:1;white-space:nowrap;-webkit-print-color-adjust:economy;print-color-adjust:economy;}}
