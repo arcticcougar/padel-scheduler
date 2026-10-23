@@ -1218,8 +1218,16 @@ def main():
             genders.append(g[1]); skills.append(g[2])
             downstairs_limits.append(g[3])
 
-    if len({x.lower() for x in raw_ng}) < len(raw_ng):
-        st.error("Duplicate player names detected."); st.stop()
+    normalized_names = [name.lower() for name in raw_ng]
+    if len(set(normalized_names)) < len(raw_ng):
+        duplicate_names = ", ".join(dict.fromkeys(
+            name for name in raw_ng if normalized_names.count(name.lower()) > 1
+        ))
+        st.error(
+            f"Duplicate player names detected: {duplicate_names}. "
+            "Change the guest name or remove the duplicate selection."
+        )
+        st.stop()
 
     players_wg = deduplicate_names(raw_wg)
     players_ng = deduplicate_names(raw_ng)
