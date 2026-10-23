@@ -903,6 +903,20 @@ def main():
                 st.markdown(", ".join(names_for_skill), unsafe_allow_html=True)
                 st.markdown("&nbsp;", unsafe_allow_html=True)
 
+        st.markdown("**Current Regulars by Court Preference (live):**")
+        for limit, label in ((0, "Keep upstairs"), (4, "Keep downstairs (up to 4 matches)")):
+            names_for_preference = []
+            for p in REGULAR_PLAYERS:
+                if p["downstairs_limit"] == limit:
+                    sym = "<span style='color:magenta;'>♀</span>" if p["gender"] == "F" \
+                          else "<span style='color:cyan;'>♂</span>"
+                    names_for_preference.append(f"{_html.escape(p['name'])} {sym}")
+            st.markdown(
+                f"{format_court_preference_icon(limit)} **{label}:** "
+                + (", ".join(names_for_preference) or "None"),
+                unsafe_allow_html=True,
+            )
+
 
     # ---- apply queued Scott testing preset (before widgets) ----
     # We MUST apply this before creating the player/court widgets, otherwise Streamlit
