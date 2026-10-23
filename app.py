@@ -1327,8 +1327,8 @@ def main():
     # John Virgo "Trick Shot Challenge" (feature name stays, content is now a daily focus)
     show_john_virgo_trickshot = st.checkbox(
         "John Virgo Trick Shot Challenge",
-        value=False,
-        help="When enabled, pick a single focus for today; it will appear under the date in the downloaded schedule.",
+        value=True,
+        help="Include one simple padel tip on today's schedule. Choose or edit it below, or untick to leave it off.",
     )
 
     def _slug_key(s: str) -> str:
@@ -1390,27 +1390,30 @@ def main():
 
     trickshot_focus_html = ""
     if show_john_virgo_trickshot:
-        # Beginner-friendly + fun shots (+ Custom) (16 total to fit 4x4 grid)
+        # Plain-language fundamentals (+ Custom), kept in the familiar 4x4 grid.
         focus_options = [
             "Custom",
             "Racket up",
-            "Split-step",
+            "Ready feet",
             "Cross-court",
             "Safe middle",
             "Mine / yours",
             "Middle balls",
             "Net together",
-            "Mix it up",
-            "Drop shot",
+            "Patient play",
+            "Serve",
+            "Return of serve",
+            "Volley",
             "Lob",
             "Wall-shot",
+            "Boast (back-wall escape)",
             "Smash",
-            "Slice",
-            "Topspin",
-            "Side-spin",
         ]
+        # Enabling the feature always selects a usable tip, never a placeholder.
+        if st.session_state.get("trickshot_focus_choice") not in focus_options:
+            st.session_state["trickshot_focus_choice"] = "Racket up"
         focus_choice = render_single_choice_checkbox_grid(
-            title="Trick-shot focus (pick one)",
+            title="Skill focus (pick one)",
             options=focus_options,
             selected_key="trickshot_focus_choice",
             key_prefix="trickshot_focus",
@@ -1425,63 +1428,100 @@ def main():
         default_focus_text = {
             "Racket up": (
                 f"{SCHEDULE_FOCUS_PREFIX} Racket up. "
-                "Set early and stay ready between shots. Keep the racket in front of you."
+                "Keep your racket in front at about chest height, with a relaxed grip. "
+                "Turn your shoulders early and use a short swing. After each shot, "
+                "bring the racket back in front, ready for the next ball."
             ),
-            "Split-step": (
-                f"{SCHEDULE_FOCUS_PREFIX} Split-step. "
-                "Do a tiny hop as your opponent hits the ball. Land balanced, then move."
+            "Ready feet": (
+                f"{SCHEDULE_FOCUS_PREFIX} Ready feet. "
+                "Take small steps to get into position. As your opponent hits, "
+                "settle with feet apart and knees soft so you can move either way. "
+                "Move to the ball rather than stretching from a fixed stance."
             ),
             "Cross-court": (
                 f"{SCHEDULE_FOCUS_PREFIX} Cross-court. "
-                "Aim cross-court most of the time—bigger target and higher margin."
+                "Aim diagonally across the net for a bigger target. Leave space "
+                "inside the side and back glass, and clear the net comfortably. "
+                "Choose a straight ball if the diagonal gap is covered."
             ),
             "Safe middle": (
                 f"{SCHEDULE_FOCUS_PREFIX} Safe middle. "
-                "When under pressure, play safely through the middle to reset the point."
+                "When rushed, use a short swing and play a steady ball through the "
+                "middle with room above the net. Aim well inside the court rather "
+                "than close to the lines. Give yourself and your partner time to recover."
             ),
             "Mine / yours": (
                 f"{SCHEDULE_FOCUS_PREFIX} Mine / yours. "
-                "Call early and commit—loud and simple: mine or yours."
+                "Call 'mine' or 'yours' early, before either player swings. "
+                "If your partner calls the ball, give them space. Between points, "
+                "agree how you will cover the middle and encourage each other."
             ),
             "Middle balls": (
                 f"{SCHEDULE_FOCUS_PREFIX} Middle balls. "
-                "Agree now who takes balls down the middle (e.g. forehand takes it), then trust it."
+                "Agree who will usually cover balls between you. The player with "
+                "the easier reach and more controlled shot should call early; "
+                "it is not always the forehand. Let one player hit while the other covers."
             ),
             "Net together": (
                 f"{SCHEDULE_FOCUS_PREFIX} Net together. "
-                "Move forward as a pair—don’t leave one player back alone."
+                "Move forward together after a lob that clears your opponents "
+                "or a shot that forces a weak reply. Get balanced as they hit. "
+                "If your lob is short, stay back together rather than rushing in."
             ),
-            "Mix it up": (
-                f"{SCHEDULE_FOCUS_PREFIX} Mix it up. "
-                "Change pace and direction on purpose—one rally ball, then a softer one."
+            "Patient play": (
+                f"{SCHEDULE_FOCUS_PREFIX} Patient play. "
+                "Aim to make one more ball, not a winner from every shot. "
+                "Use a steady pace and make your opponents play. Attack a "
+                "comfortable ball when balanced; a low ball at your feet needs control, not power."
             ),
-            "Drop shot": (
-                f"{SCHEDULE_FOCUS_PREFIX} Drop shot. "
-                "Soften the hands and keep it low. Try it only when you’re balanced."
+            "Serve": (
+                f"{SCHEDULE_FOCUS_PREFIX} Serve. "
+                "Bounce the ball behind the service line and hit at or below "
+                "waist height. Use a smooth, short swing and aim diagonally "
+                "well inside the service box. Choose placement over power, "
+                "then move forward with your partner."
+            ),
+            "Return of serve": (
+                f"{SCHEDULE_FOCUS_PREFIX} Return of serve. "
+                "Let the serve bounce, prepare a short swing and aim a controlled "
+                "return low through the middle or cross-court. If you have time "
+                "and balance, a high lob can push opponents back. Getting the "
+                "return in matters more than hitting hard."
+            ),
+            "Volley": (
+                f"{SCHEDULE_FOCUS_PREFIX} Volley. "
+                "Keep the racket up and meet the ball in front with a short, "
+                "firm push rather than a big swing. Aim safely past the service "
+                "line when you can. If the ball is below net height, lift it "
+                "over with control instead of forcing a winner."
             ),
             "Lob": (
                 f"{SCHEDULE_FOCUS_PREFIX} Lob. "
-                "When under pressure, go high and deep to buy time and take the net away."
+                "Choose a ball you can get under comfortably. Start with the "
+                "racket below the ball and lift smoothly, aiming high over "
+                "your opponents with room inside the back glass. Move up "
+                "together only if your lob gets past them."
             ),
             "Wall-shot": (
                 f"{SCHEDULE_FOCUS_PREFIX} Wall-shot. "
-                "If it’s going past you, let it bounce. Wait, then play it after the wall."
+                "If a deep ball will reach the back glass, let it bounce on "
+                "the floor first, then off the glass. Turn early, leave room "
+                "for the rebound and meet the ball in front before its second "
+                "floor bounce. Use a calm, short swing."
+            ),
+            "Boast (back-wall escape)": (
+                f"{SCHEDULE_FOCUS_PREFIX} Boast (back-wall escape). "
+                "If trapped at the back, face your own back glass. Before the "
+                "second bounce, tilt the racket face up and hit upwards into "
+                "the glass so the rebound clears the net and lands in their "
+                "court. Use glass, never the metal fence."
             ),
             "Smash": (
                 f"{SCHEDULE_FOCUS_PREFIX} Smash. "
-                "Choose the right one—placement over power. If it’s not on, don’t force it."
-            ),
-            "Slice": (
-                f"{SCHEDULE_FOCUS_PREFIX} Slice. "
-                "A gentle cut under the ball for control—short swing, firm wrist, keep it low."
-            ),
-            "Topspin": (
-                f"{SCHEDULE_FOCUS_PREFIX} Topspin. "
-                "Brush up the back of the ball to help it dip in and land deeper."
-            ),
-            "Side-spin": (
-                f"{SCHEDULE_FOCUS_PREFIX} Side-spin. "
-                "Add a little curve around the ball—keep it controlled and use it occasionally."
+                "Only hit overhead when you can get balanced behind the ball "
+                "and contact it in front. Use a controlled swing and aim well "
+                "inside the court. If the ball goes over you, turn and let it "
+                "bounce rather than reaching backwards for power."
             ),
         }
 
@@ -1491,8 +1531,9 @@ def main():
                 txt_key = "trickshot_custom_text_custom"
                 if txt_key not in st.session_state:
                     st.session_state[txt_key] = (
-                        f"{SCHEDULE_FOCUS_PREFIX} XXXXX. "
-                        "Write your custom instructions here."
+                        f"{SCHEDULE_FOCUS_PREFIX} Play with control. "
+                        "Keep the ball in play, choose a comfortable pace "
+                        "and encourage your partner."
                     )
 
                 edited = st.text_area(
@@ -1528,7 +1569,9 @@ def main():
                         "</div></div>"
                     )
             else:
-                txt_key = f"trickshot_custom_text_{_slug_key(focus_choice)}"
+                # Use refreshed copy even in sessions with cached older tips.
+                # The separate Custom field above retains the organiser's text.
+                txt_key = f"trickshot_preset_v2_{_slug_key(focus_choice)}"
                 if txt_key not in st.session_state:
                     st.session_state[txt_key] = default_focus_text.get(focus_choice, "")
 
