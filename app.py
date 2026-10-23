@@ -472,6 +472,65 @@ def format_downstairs_court_icon():
     )
 
 
+def schedule_background_html():
+    """Original, sparse padel doodles; embedded vector art keeps downloads portable."""
+    return """
+    <svg class="sched-doodles" xmlns="http://www.w3.org/2000/svg"
+         viewBox="0 0 800 1140" preserveAspectRatio="none" aria-hidden="true" focusable="false">
+      <defs>
+        <g id="doodle-racket" fill="none" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M22 4C8 3 1 14 3 28c1 10 9 15 13 21v18c0 4 11 4 11 0V49c4-6 12-11 13-21C42 14 36 4 22 4Z"/>
+          <path d="M16 49h11M16 54h11M17 61l9 4"/>
+          <circle cx="14" cy="18" r="2"/><circle cx="24" cy="15" r="2"/>
+          <circle cx="32" cy="21" r="2"/><circle cx="12" cy="28" r="2"/>
+          <circle cx="23" cy="25" r="2"/><circle cx="30" cy="32" r="2"/>
+          <circle cx="20" cy="36" r="2"/>
+          <path d="M8 11c-3 4-4 8-3 12"/>
+        </g>
+        <pattern id="padel-doodle-tile" width="300" height="300" patternUnits="userSpaceOnUse">
+          <g fill="none" stroke="#cdcdcd" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round">
+            <use href="#doodle-racket" transform="translate(22 20) rotate(-22 22 35)"/>
+            <use href="#doodle-racket" transform="translate(50 176) rotate(25 22 35) scale(.8)"/>
+            <!-- Padel balls with their curved seams. -->
+            <g transform="translate(122 34) rotate(25)">
+              <circle r="12"/><path d="M-7-10c8 5 8 15 0 20M7-10c-8 5-8 15 0 20"/>
+            </g>
+            <g transform="translate(269 207) rotate(-20)">
+              <circle r="9"/><path d="M-5-7c5 4 5 10 0 14M5-7c-5 4-5 10 0 14"/>
+            </g>
+            <!-- A glass-sided court and centre net. -->
+            <g transform="translate(205 27) rotate(12 26 40)">
+              <rect x="0" y="0" width="52" height="80" rx="3"/>
+              <path d="M0 40h52M3 36v8m46-8v8M0 21h52M0 59h52M26 21v38M-5 4v21m62 30v21"/>
+            </g>
+            <!-- Water bottle, with a loose hand-drawn label. -->
+            <g transform="translate(111 100) rotate(14 12 27)">
+              <path d="M7 4h10v8l5 7v34c0 5-22 5-22 0V19l7-7ZM6 0h12v5H6ZM0 29c8-3 14 3 22 0M0 43c8-3 14 3 22 0"/>
+            </g>
+            <!-- Court net. -->
+            <g transform="translate(176 174) rotate(-9 36 18)">
+              <path d="M0 0v43m72-43v43M0 8c24 5 48 5 72 0M0 32h72M12 11v21m12-19v19m12-18v18m12-19v19m12-21v21M0 20h72"/>
+            </g>
+            <!-- Trainers and towel. -->
+            <g transform="translate(109 240) rotate(-12)">
+              <path d="M0 18 7 0l16 8 8 10 22 5c8 2 8 13 0 13H5c-7 0-9-11-5-18ZM0 28h58M13 9l12 6m-15 0 13 6m4-4-5 7"/>
+            </g>
+            <g transform="translate(219 257) rotate(14)">
+              <path d="M0 0h44v31H0ZM8 0v31m28-31v31M0 26h44M3 31v4m6-4v4m6-4v4m6-4v4m6-4v4m6-4v4m6-4v4"/>
+            </g>
+            <!-- Sunny Mijas, plus small movement marks and sparkles. -->
+            <g transform="translate(269 132)">
+              <circle r="8"/><path d="M0-13v-5m0 31v5m13-18h5m-31 0h-5m27-9 4-4m-22 22-4 4m22-4 4 4m-22-22-4-4"/>
+            </g>
+            <path d="m167 75 2 7 7 2-7 2-2 7-2-7-7-2 7-2ZM20 131l2 5 5 2-5 2-2 5-2-5-5-2 5-2M151 188l2 5m-10 0 2 5M76 94l6-2m-4 9 6-2M18 281c7-8 15-8 22-3"/>
+          </g>
+        </pattern>
+      </defs>
+      <rect width="800" height="1140" fill="url(#padel-doodle-tile)"/>
+    </svg>
+    """
+
+
 def format_match_table_html(match_no, groups, court_names, player_names, bench,
                            block_tag=None, downstairs_idx=None, time_label=None,
                            match_offset: int = 0):
@@ -1570,9 +1629,11 @@ def main():
                     start_dt=datetime.combine(sess_date, sess_time),
                     match_offset=max(0, int(start_match_number) - 1),
                     header_html=(
+                        "<header class='sched-heading'>"
                         "<h1 class='sched-title'>Mijas Padellers Match Schedule</h1>"
                         f"<h2 class='sched-date'>{date_str}</h2>"
                         + trickshot_focus_html
+                        + "</header>"
                     ),
                     repeat_header_html=(trickshot_focus_html or ""),
                     first_page_footer_html="",
@@ -1583,12 +1644,15 @@ def main():
                 <title>Mijas Padellers Match Schedule - {date_str} (v{s_no+1})</title>
                 <style>
                     body{{font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;background:#fff;color:#000;margin:0;padding:20px;}}
+                    .sched-doodles{{position:fixed;inset:0;width:100%;height:100%;z-index:0;pointer-events:none;}}
+                    .container{{position:relative;z-index:1;}}
+                    .sched-heading{{background:#fff;}}
                     table{{width:100%;border-collapse:collapse;margin-bottom:10px;table-layout:fixed;}}
                     th,td{{padding:6px;border:1px solid #ddd;text-align:left;}}
                     th{{background:#f2f2f2;font-size:1.1em;}}
                     tr:nth-child(even){{background:#f9f9f9;}}
-                    .sched-title{{text-align:center;margin:0 0 4px 0;font-size:1.7em;}}
-                    .sched-date{{text-align:center;margin:0 0 6px 0;font-size:1.15em;font-weight:600;}}
+                    .sched-title{{text-align:center;margin:0 0 4px 0;font-size:1.7em;background:#fff;}}
+                    .sched-date{{text-align:center;margin:0 0 6px 0;font-size:1.15em;font-weight:600;background:#fff;}}
                     .sched-focus{{margin:0 auto 12px auto;max-width:980px;padding:0 28px;box-sizing:border-box;}}
                     .sched-focus-inner{{background:#eef6ff;border:1px solid #cce0ff;border-radius:10px;padding:10px 12px;text-align:center;line-height:1.25;color:#111;}}
                     .sched-focus-inner{{-webkit-print-color-adjust:exact;print-color-adjust:exact;}}
@@ -1598,7 +1662,7 @@ def main():
                     @page{{size:A4;margin:10mm;}}
                     @media print{{
                         body{{margin:0;padding:0;font-size:12pt;line-height:1.2;}}
-                        .match-block{{break-inside:avoid;page-break-inside:avoid;margin-bottom:8px!important;box-shadow:none!important;border-radius:0!important;overflow:visible!important;}}
+                        .match-block{{break-inside:avoid;page-break-inside:avoid;margin:0 3mm 12px!important;box-shadow:none!important;border-radius:0!important;overflow:visible!important;background:#fff!important;}}
                         .match-content{{padding:0!important;}}
                         .match-title{{font-size:15pt;margin:0 0 5px!important;border-top:1px solid #555;padding-top:6px;}}
                         .match-block table{{margin-bottom:0;}}
@@ -1613,7 +1677,7 @@ def main():
                         .sched-focus-head,.sched-focus-body{{font-size:11pt;color:#000;}}
                         .downstairs-badge{{background:#fff!important;color:#000!important;border:.6pt solid #555;border-radius:2px;padding:1px 4px!important;font-size:8.5pt!important;-webkit-print-color-adjust:economy;print-color-adjust:economy;}}
                     }}
-                </style></head><body><div class='container'>
+                </style></head><body>{schedule_background_html()}<div class='container'>
                 {sched_html}
                 </div></body></html>"""
 
