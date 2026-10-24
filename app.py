@@ -48,15 +48,15 @@ div[data-testid="stProgressBar"] { margin: 2px 0; padding: 2px 0; }
 }
 .st-key-guest_controls_7 { padding-bottom: 0; border-bottom: 0; }
 /* Keep the existing dense grid, with a clear selectable row and keyboard focus. */
-.st-key-regular_player_grid {
+:is(.st-key-regular_player_grid, .st-key-regular_court_grid) {
     display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
-    grid-template-rows: repeat(var(--player-grid-rows), auto); grid-auto-flow: column;
+    grid-template-rows: repeat(var(--selection-grid-rows), auto); grid-auto-flow: column;
     gap: .5rem .75rem;
 }
-.st-key-regular_player_grid > [data-testid="stElementContainer"] {
+:is(.st-key-regular_player_grid, .st-key-regular_court_grid) > [data-testid="stElementContainer"] {
     min-width: 0; width: 100% !important;
 }
-.st-key-regular_player_grid [data-testid="stCheckbox"] { width: 100% !important; }
+:is(.st-key-regular_player_grid, .st-key-regular_court_grid) [data-testid="stCheckbox"] { width: 100% !important; }
 :is(.st-key-regular_player_grid, .st-key-regular_court_grid) [data-testid="stCheckbox"] label {
     box-sizing: border-box; width: 100%; min-height: 1.5rem;
     padding: 0 .375rem; border: 0; border-radius: .375rem;
@@ -100,16 +100,7 @@ div[data-testid="stProgressBar"] { margin: 2px 0; padding: 2px 0; }
         min-width: 0 !important; width: 100% !important;
     }
     .st-key-session_settings [data-testid="stColumn"]:first-child { grid-column: 1 / -1; }
-    .st-key-regular_court_grid > [data-testid="stHorizontalBlock"] {
-        display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: .75rem;
-    }
-    .st-key-regular_court_grid > [data-testid="stHorizontalBlock"] > [data-testid="stColumn"] {
-        width: 100% !important; min-width: 0 !important;
-    }
-    .st-key-regular_player_grid [data-testid="stVerticalBlock"],
-    .st-key-regular_court_grid [data-testid="stVerticalBlock"] { gap: .125rem; }
-    .st-key-regular_player_grid {
+    :is(.st-key-regular_player_grid, .st-key-regular_court_grid) {
         grid-template-columns: repeat(2, minmax(0, 1fr));
         grid-template-rows: none; grid-auto-flow: row; row-gap: .125rem;
     }
@@ -1230,7 +1221,7 @@ def main():
     # ------------ player selection ------------------------
     per_col = math.ceil(len(REGULAR_PLAYERS) / 4)
     st.markdown(
-        f"<style>.st-key-regular_player_grid {{ --player-grid-rows: {per_col}; }}</style>",
+        f"<style>.st-key-regular_player_grid {{ --selection-grid-rows: {per_col}; }}</style>",
         unsafe_allow_html=True,
     )
     with st.container(key="regular_player_grid"):
@@ -1355,18 +1346,17 @@ def main():
     regular_downstairs, _ = identify_downstairs_courts(REG_COURTS)
     per_col_c   = math.ceil(len(REG_COURTS) / 4)
     sel_courts  = []
+    st.markdown(
+        f"<style>.st-key-regular_court_grid {{ --selection-grid-rows: {per_col_c}; }}</style>",
+        unsafe_allow_html=True,
+    )
     with st.container(key="regular_court_grid"):
-        cols_c = st.columns(4)
-        for c in range(4):
-            with cols_c[c]:
-                for r in range(per_col_c):
-                    idx = c * per_col_c + r
-                    if idx < len(REG_COURTS):
-                        court_label = REG_COURTS[idx]
-                        if idx in regular_downstairs:
-                            court_label += " :red[↓\ufe0e]"
-                        if st.checkbox(court_label, key=f"court_{idx}"):
-                            sel_courts.append(REG_COURTS[idx])
+        for idx, court_name in enumerate(REG_COURTS):
+            court_label = court_name
+            if idx in regular_downstairs:
+                court_label += " :red[↓\ufe0e]"
+            if st.checkbox(court_label, key=f"court_{idx}"):
+                sel_courts.append(court_name)
 
     with st.expander("➕ Add Up to 4 Custom Courts (optional)", expanded=False):
         custom_courts = []
