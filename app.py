@@ -885,7 +885,7 @@ def main():
     with st.container(key="session_settings", border=True):
         date_col, time_col, number_col = st.columns([1.3, 1, 1])
         with date_col:
-            sess_date = st.date_input("📅 Session Date", value=date.today())
+            sess_date = st.date_input("📅 Session Date", value=date.today(), format="DD/MM/YYYY")
         with time_col:
             sess_time = st.time_input("⏰ Start Time", value=time(hour=10, minute=30))
         with number_col:
