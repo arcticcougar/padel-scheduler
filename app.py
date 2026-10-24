@@ -860,7 +860,7 @@ def main():
     # Permanent court defaults: 2 = Standard rotation, 0 = Keep upstairs,
     # 4 = Keep downstairs (up to four matches, in two-match stays).
     REGULAR_PLAYERS = [
-        {"name": "Agelina", "gender": "F", "skill": 5, "downstairs_limit": 2},
+        {"name": "Angelina", "gender": "F", "skill": 5, "downstairs_limit": 2},
         {"name": "Aideen", "gender": "F", "skill": 5, "downstairs_limit": 2},
         {"name": "Anna", "gender": "F", "skill": 5, "downstairs_limit": 2},
         {"name": "Anne", "gender": "F", "skill": 4, "downstairs_limit": 0},
@@ -921,6 +921,23 @@ def main():
         {"name": "Wendy", "gender": "F", "skill": 4, "downstairs_limit": 0},
     ]
     REGULAR_PLAYERS = sorted(REGULAR_PLAYERS, key=lambda x: x["name"])
+
+    # Preserve today's choices when correcting Angelina's name and sort position.
+    if not st.session_state.get("angelina_name_corrected", False):
+        renamed_keys = {
+            "p_sel_Agelina0": "p_sel_Angelina1",
+            "p_sel_Aideen1": "p_sel_Aideen0",
+            "skill_Agelina": "skill_Angelina",
+            "court_pref_Agelina": "court_pref_Angelina",
+        }
+        for old_key, new_key in renamed_keys.items():
+            if old_key in st.session_state and new_key not in st.session_state:
+                st.session_state[new_key] = st.session_state[old_key]
+        for state_key in ("player_selection_order", "downstairs_player_preferences"):
+            choices = st.session_state.get(state_key, {})
+            if "Agelina" in choices:
+                choices.setdefault("Angelina", choices.pop("Agelina"))
+        st.session_state["angelina_name_corrected"] = True
 
     # ------------ today's player adjustments (optional) ------------
     court_preferences = {"Standard rotation": 2, "Keep upstairs": 0, "Keep downstairs": 4}
@@ -1002,7 +1019,7 @@ def main():
             choice = st.selectbox("Court preference", court_labels, key=key, help=court_help)
         return court_preferences[choice]
 
-    st.header("👥 Select Regular Players")
+    st.header(":orange[:material/groups:] Select Regular Players")
     with st.expander("⚙️ Adjust Regular Player Skills & Court Preferences (today)",
                      expanded=False):
         st.caption("Change a player's skill or court preference for today's schedule. "
