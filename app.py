@@ -172,16 +172,32 @@ def evaluate_match(groups, teammate_mtx, opponent_mtx, reject_mixed, genders,
 def find_best_match(players, n_courts, court_sz, teammate_mtx, opponent_mtx,
                     match_no, samples=100000, reject_mixed=False,
                     genders=None, enable_skill=False, skills=None, skill_wt=20,
-                    history=None, match_offset: int = 0):
+                    history=None, match_offset: int = 0, previous_configs=None):
     if len(players) != n_courts * court_sz or len(set(players)) != len(players):
         raise ValueError("Every active court must have four different players.")
     if n_courts == 0:
         return []
     best, best_score = None, float('inf')
     bar = st.progress(0); status = st.empty()
-    for i in range(samples):
-        shuffled = players[:]; random.shuffle(shuffled)
-        groups = [tuple(shuffled[j*court_sz:(j+1)*court_sz]) for j in range(n_courts)]
+    configurations = None
+    if n_courts == 1 and court_sz == 4:
+        # There are only three team splits. Check them all even at low sample
+        # settings, and change teams from the preceding match when possible.
+        a, b, c, d = players
+        configurations = [[(a, b, c, d)], [(a, c, b, d)], [(a, d, b, c)]]
+        if previous_configs:
+            configurations = [g for g in configurations
+                              if canonical_config(g[0]) not in previous_configs]
+        random.shuffle(configurations)
+    for i in range(len(configurations) if configurations is not None else samples):
+        if configurations is not None:
+            groups = configurations[i]
+        else:
+            shuffled = players[:]; random.shuffle(shuffled)
+            groups = [tuple(shuffled[j*court_sz:(j+1)*court_sz]) for j in range(n_courts)]
+            if court_sz == 4 and previous_configs:
+                groups = [(g[0], g[2], g[1], g[3])
+                          if canonical_config(g) in previous_configs else g for g in groups]
         if len(set(itertools.chain(*groups))) != len(players):
             continue
         s = evaluate_match(groups, teammate_mtx, opponent_mtx, reject_mixed, genders,
@@ -296,11 +312,33 @@ def extract_pairings_lines_from_stats_html(stats_html: str) -> list[str]:
 # -------------------- downstairs rotation helpers --------------------------- #
 def identify_downstairs_courts(court_names):
     """Return (downstairs_idx, upstairs_idx) based on courts 12/13 aliases."""
-    downstairs_aliases = {"Court 12", "12", "Court 13", "13"}
-    downstairs_idx = [i for i, c in enumerate(court_names)
-                      if c in downstairs_aliases or c.endswith("12") or c.endswith("13")]
+    def is_downstairs(name):
+        label = name.strip()
+        return label.endswith(("12", "13")) and (len(label) == 2 or not label[-3].isdigit())
+
+    downstairs_idx = [i for i, c in enumerate(court_names) if is_downstairs(c)]
     upstairs_idx = [i for i in range(len(court_names)) if i not in downstairs_idx]
     return downstairs_idx, upstairs_idx
+
+def validate_unique_courts(court_names):
+    """Reject repeated physical courts, including numeric downstairs aliases."""
+    seen = set()
+    for name in court_names:
+        label = " ".join(name.casefold().split())
+        compact = label.replace(" ", "")
+        number = compact.removeprefix("court")
+        if identify_downstairs_courts([name])[0]:
+            key = f"court{label[-2:]}"
+        elif number.isdecimal():
+            key = f"court{int(number)}"
+        else:
+            key = label
+        if key in seen:
+            raise ValueError(
+                f"The same court is selected more than once: {name}. "
+                "Remove the duplicate custom court entry."
+            )
+        seen.add(key)
 
 def validate_downstairs_limits(players, total_matches, downstairs_slots, limits=None):
     """Return stay limits or explain why the selected courts cannot be filled."""
@@ -740,13 +778,14 @@ def generate_Schedule_Statistics(team_mtx, opp_mtx, rest_track, names,
 # --------------------------------------------------------------------------- #
 def assign_matches(names, genders, skills, courts, court_sz=4, total_matches=6,
                    samples=100000, reject_mixed=False, enable_skill=False,
-                   skill_wt=20, same_sex_matches_count=0,
+                   skill_wt=20, same_sex_matches_count=None,
                    downstairs_limits=None,
                    start_dt: datetime | None = None,
                    match_offset: int = 0,
                    header_html: str = "",
                    repeat_header_html: str = "",
                    first_page_footer_html: str = ""):
+    validate_unique_courts(courts)
     n_players = len(names)
     courts_used = determine_courts_to_use(n_players, len(courts), court_sz)
     active_courts = courts[:courts_used]
@@ -757,11 +796,10 @@ def assign_matches(names, genders, skills, courts, court_sz=4, total_matches=6,
     history = set()
     all_matches = []
 
-    eff_same_sex_count = same_sex_matches_count if reject_mixed else 0
-    spaced_same_sex = compute_same_sex_match_indices(total_matches, eff_same_sex_count)
-    preferred_indices = spaced_same_sex if same_sex_matches_count > 0 else (
-        range(total_matches) if reject_mixed else []
-    )
+    preferred_indices = (
+        list(range(total_matches)) if same_sex_matches_count is None else
+        compute_same_sex_match_indices(total_matches, same_sex_matches_count)
+    ) if reject_mixed else []
     # Every active downstairs court follows the same eligibility/stay limits,
     # including sessions with only downstairs courts.
     rotation = build_downstairs_rotation(
@@ -789,10 +827,8 @@ def assign_matches(names, genders, skills, courts, court_sz=4, total_matches=6,
             court_pools = [
                 (list(range(courts_used)), [p for p in players if p not in benched])
             ]
-        effective_reject_mixed = (
-            match_no in spaced_same_sex
-            if same_sex_matches_count > 0 else bool(reject_mixed)
-        )
+        effective_reject_mixed = match_no in preferred_indices
+        previous_configs = {canonical_config(g) for g in all_matches[-1][0]} if all_matches else set()
         groups = [None] * courts_used
         for court_indices, available in court_pools:
             best = find_best_match(
@@ -800,6 +836,7 @@ def assign_matches(names, genders, skills, courts, court_sz=4, total_matches=6,
                 teammate_mtx, opponent_mtx, match_no, samples,
                 effective_reject_mixed, genders, enable_skill, skills,
                 skill_wt, history, match_offset=match_offset,
+                previous_configs=previous_configs,
             )
             for cid, group in zip(court_indices, best):
                 groups[cid] = group
@@ -1324,7 +1361,12 @@ def main():
     default_samples = int(min(max_unique, 200_000)) if max_unique else 200_000
 
     downstairs_error = None
-    if active_down:
+    try:
+        validate_unique_courts(courts)
+    except ValueError as exc:
+        downstairs_error = str(exc)
+        st.warning(downstairs_error)
+    if active_down and downstairs_error is None:
         st.caption("To change who goes downstairs, open Adjust Regular Player Skills & Court "
                    "Preferences above. Guest preferences are beside each guest's details.")
         try:
