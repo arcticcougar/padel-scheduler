@@ -12,6 +12,7 @@ import urllib.request
 import urllib.error
 import html as _html
 import math
+import threading
 from math import comb, factorial
 
 # --------------------------------------------------------------------------- #
@@ -47,6 +48,15 @@ div[data-testid="stProgressBar"] { margin: 2px 0; padding: 2px 0; }
 }
 .st-key-guest_controls_7 { padding-bottom: 0; border-bottom: 0; }
 /* Keep the existing dense grid, with a clear selectable row and keyboard focus. */
+.st-key-regular_player_grid {
+    display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-rows: repeat(var(--player-grid-rows), auto); grid-auto-flow: column;
+    gap: .5rem .75rem;
+}
+.st-key-regular_player_grid > [data-testid="stElementContainer"] {
+    min-width: 0; width: 100% !important;
+}
+.st-key-regular_player_grid [data-testid="stCheckbox"] { width: 100% !important; }
 :is(.st-key-regular_player_grid, .st-key-regular_court_grid) [data-testid="stCheckbox"] label {
     box-sizing: border-box; width: 100%; min-height: 1.5rem;
     padding: 0 .375rem; border: 0; border-radius: .375rem;
@@ -90,17 +100,19 @@ div[data-testid="stProgressBar"] { margin: 2px 0; padding: 2px 0; }
         min-width: 0 !important; width: 100% !important;
     }
     .st-key-session_settings [data-testid="stColumn"]:first-child { grid-column: 1 / -1; }
-    .st-key-regular_player_grid > [data-testid="stHorizontalBlock"],
     .st-key-regular_court_grid > [data-testid="stHorizontalBlock"] {
         display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
         gap: .75rem;
     }
-    .st-key-regular_player_grid > [data-testid="stHorizontalBlock"] > [data-testid="stColumn"],
     .st-key-regular_court_grid > [data-testid="stHorizontalBlock"] > [data-testid="stColumn"] {
         width: 100% !important; min-width: 0 !important;
     }
     .st-key-regular_player_grid [data-testid="stVerticalBlock"],
     .st-key-regular_court_grid [data-testid="stVerticalBlock"] { gap: .125rem; }
+    .st-key-regular_player_grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        grid-template-rows: none; grid-auto-flow: row; row-gap: .125rem;
+    }
     .st-key-regular_player_grid [data-testid="stCheckbox"] label,
     .st-key-regular_court_grid [data-testid="stCheckbox"] label {
         min-height: 2.75rem; width: 100%; align-items: center;
@@ -118,6 +130,37 @@ st.markdown(COMPACT_CSS, unsafe_allow_html=True)
 # --------------------------------------------------------------------------- #
 #  Helper functions                                                           #
 # --------------------------------------------------------------------------- #
+def draw_next_skill_focus(options, state, rng=None):
+    """Draw every preset once in shuffled order before refilling the cycle."""
+    options = list(dict.fromkeys(options))
+    if not options:
+        raise ValueError("At least one skill focus is required.")
+    if state.get("options") != options:
+        state["options"] = options
+        state["remaining"] = []
+    if not state.get("remaining"):
+        deck = options[:]
+        (rng if rng is not None else random.SystemRandom()).shuffle(deck)
+        if len(deck) > 1 and deck[-1] == state.get("last"):
+            deck[0], deck[-1] = deck[-1], deck[0]
+        state["remaining"] = deck
+    choice = state["remaining"].pop()
+    state["last"] = choice
+    return choice
+
+
+def next_session_skill_focus(options):
+    # Shared across fresh browser sessions; ordinary widget reruns never draw.
+    # Like other in-memory app state, this cycle resets on a server restart.
+    @st.cache_resource(show_spinner=False)
+    def shared_cycle():
+        return {"state": {}, "lock": threading.Lock()}
+
+    cycle = shared_cycle()
+    with cycle["lock"]:
+        return draw_next_skill_focus(options, cycle["state"])
+
+
 def initialize_matrices(n):
     return (np.zeros((n, n), int), np.zeros((n, n), int))
 
@@ -1186,21 +1229,19 @@ def main():
 
     # ------------ player selection ------------------------
     per_col = math.ceil(len(REGULAR_PLAYERS) / 4)
+    st.markdown(
+        f"<style>.st-key-regular_player_grid {{ --player-grid-rows: {per_col}; }}</style>",
+        unsafe_allow_html=True,
+    )
     with st.container(key="regular_player_grid"):
-        cols_p = st.columns(4)
-        for c in range(4):
-            with cols_p[c]:
-                for r in range(per_col):
-                    idx = c * per_col + r
-                    if idx < len(REGULAR_PLAYERS):
-                        p = REGULAR_PLAYERS[idx]
-                        sel = st.checkbox(p["name"], key=f"p_sel_{p['name']}{idx}")
-                        if sel:
-                            if st.session_state["player_selection_order"].get(p["name"]) is None:
-                                st.session_state["player_selection_order"][p["name"]] = st.session_state["player_counter"]
-                                st.session_state["player_counter"] += 1
-                        else:
-                            st.session_state["player_selection_order"][p["name"]] = None
+        for idx, p in enumerate(REGULAR_PLAYERS):
+            sel = st.checkbox(p["name"], key=f"p_sel_{p['name']}{idx}")
+            if sel:
+                if st.session_state["player_selection_order"].get(p["name"]) is None:
+                    st.session_state["player_selection_order"][p["name"]] = st.session_state["player_counter"]
+                    st.session_state["player_counter"] += 1
+            else:
+                st.session_state["player_selection_order"][p["name"]] = None
 
     # ------------ guest players ---------------------------
     with st.expander("➕ Add Up to 8 Guest Players (optional)", expanded=False):
@@ -1476,9 +1517,15 @@ def main():
             "Boast (back-wall escape)",
             "Smash",
         ]
-        # Enabling the feature always selects a usable tip, never a placeholder.
+        # Draw once per new page session, retaining manual choices and edits.
+        if "trickshot_focus_session_default" not in st.session_state:
+            current_focus = st.session_state.get("trickshot_focus_choice")
+            st.session_state["trickshot_focus_session_default"] = (
+                current_focus if current_focus in focus_options else
+                next_session_skill_focus([opt for opt in focus_options if opt != "Custom"])
+            )
         if st.session_state.get("trickshot_focus_choice") not in focus_options:
-            st.session_state["trickshot_focus_choice"] = "Racket up"
+            st.session_state["trickshot_focus_choice"] = st.session_state["trickshot_focus_session_default"]
         focus_choice = render_single_choice_checkbox_grid(
             title="Skill focus (pick one)",
             options=focus_options,
