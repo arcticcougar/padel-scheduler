@@ -3,6 +3,7 @@
 #  Last updated: 23 Oct 2026 – Combined player skills and court preferences    #
 ###############################################################################
 import streamlit as st
+import streamlit.components.v1 as components
 import itertools
 import numpy as np
 import random
@@ -47,6 +48,7 @@ div[data-testid="stProgressBar"] { margin: 2px 0; padding: 2px 0; }
     padding-bottom: .75rem; border-bottom: 1px solid rgba(128, 128, 128, .2);
 }
 .st-key-guest_controls_7 { padding-bottom: 0; border-bottom: 0; }
+.st-key-manual_group_option_styles { display: none; }
 /* Keep the existing dense grid, with a clear selectable row and keyboard focus. */
 :is(.st-key-regular_player_grid, .st-key-regular_court_grid) {
     display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -447,6 +449,72 @@ def validate_downstairs_groups(players, total_matches, downstairs_slots, groups,
             raise ValueError(f"{display_names[player]} has {counts[player]} downstairs matches selected "
                              f"but their limit is {limit}. {advice}")
     return rotation
+
+
+def downstairs_group_choices(eligible_names, groups, block):
+    """List unused names first and label choices already used in other blocks."""
+    used_in = {}
+    for other, group in enumerate(groups):
+        if other != block:
+            for name in set(group):
+                used_in.setdefault(name, []).append(other + 1)
+    options = sorted(eligible_names, key=lambda name: (name in used_in, name.casefold()))
+    labels = {}
+    for name in options:
+        if name in used_in:
+            blocks = ", ".join(map(str, used_in[name]))
+            noun = "block" if len(used_in[name]) == 1 else "blocks"
+            labels[name] = f"🔴 {name} · already in {noun} {blocks}"
+        else:
+            labels[name] = name
+    return options, labels
+
+
+def highlight_used_group_options():
+    # Streamlit 1.41 formats option labels as plain text. Retain the native
+    # searchable/keyboard-accessible widget and colour only marked menu rows.
+    # The red symbol and explanatory text remain usable if styling is blocked.
+    with st.container(key="manual_group_option_styles"):
+        components.html(r"""
+<script>
+(() => {
+  let host, doc;
+  try { host = window.parent; doc = host.document; } catch (_) { return; }
+  const key = '__mijasUsedGroupOptionObserver';
+  if (host[key]) host[key].disconnect();
+  const styleId = 'mijas-used-group-option-style';
+  let style = doc.getElementById(styleId);
+  if (!style) {
+    style = doc.createElement('style');
+    style.id = styleId;
+    doc.head.appendChild(style);
+  }
+  const rgb = (host.getComputedStyle(doc.body).color.match(/\d+/g) || ['0','0','0']).map(Number);
+  const brightText = rgb[0]*299 + rgb[1]*587 + rgb[2]*114 > 128000;
+  const red = brightText ? '#ff6b6b' : '#b42318';
+  style.textContent = '[data-testid="stSelectboxVirtualDropdown"] li[data-mijas-used="true"],'
+    + '[data-testid="stSelectboxVirtualDropdown"] li[data-mijas-used="true"] *'
+    + '{color:' + red + '!important;}';
+  const mark = () => {
+    doc.querySelectorAll('[data-testid="stSelectboxVirtualDropdown"] li[role="option"]').forEach(row => {
+      const text = row.textContent || '';
+      if (text.startsWith('🔴 ') && text.includes(' · already in block')) {
+        row.setAttribute('data-mijas-used', 'true');
+      } else {
+        row.removeAttribute('data-mijas-used');
+      }
+    });
+  };
+  const observer = new MutationObserver(mark);
+  observer.observe(doc.body, {childList:true, subtree:true, characterData:true});
+  host[key] = observer;
+  mark();
+  window.addEventListener('pagehide', () => {
+    if (host[key] === observer) { observer.disconnect(); delete host[key]; }
+  });
+})();
+</script>
+""", height=0)
 
 
 def build_downstairs_rotation(players, total_matches, downstairs_slots, upstairs_slots,
@@ -1455,11 +1523,23 @@ def main():
                 key=str.casefold,
             )
             drafts = st.session_state.setdefault("manual_downstairs_group_drafts", {})
+            block_count = math.ceil(total_matches / 2)
+            # Snapshot every widget before rendering: edits to a later block
+            # must update labels in earlier dropdowns in the very same rerun.
+            previous_groups = [
+                list(st.session_state.get(f"manual_downstairs_block_{block}", drafts.get(block, [])))
+                for block in range(block_count)
+            ]
+            active_groups = [
+                [name for name in group if name in eligible_names] for group in previous_groups
+            ]
+            st.caption("Unused players are listed first. 🔴 marks players chosen in another block.")
+            highlight_used_group_options()
             downstairs_names = []
             downstairs_slots = 4 * len(active_down)
             session_start = datetime.combine(sess_date, sess_time)
             court_label = ", ".join(courts[i] for i in active_down)
-            for block in range(math.ceil(total_matches / 2)):
+            for block in range(block_count):
                 first_round = 2 * block
                 block_rounds = min(2, total_matches - first_round)
                 block_start = session_start + timedelta(minutes=15 * first_round)
@@ -1468,9 +1548,10 @@ def main():
                 matches_label = (f"Match {first_number}" if block_rounds == 1 else
                                  f"Matches {first_number}–{first_number + 1}")
                 group_key = f"manual_downstairs_block_{block}"
-                previous = list(st.session_state.get(group_key, drafts.get(block, [])))
-                retained = [name for name in previous if name in eligible_names]
+                previous = previous_groups[block]
+                retained = active_groups[block]
                 st.session_state[group_key] = retained
+                options, option_labels = downstairs_group_choices(eligible_names, active_groups, block)
                 with st.container(border=True):
                     st.markdown(f"**{block_start:%H:%M}–{block_end:%H:%M} · {matches_label}**")
                     if retained != previous:
@@ -1478,7 +1559,8 @@ def main():
                         st.info(f"Removed from this group: {removed}. "
                                 "They are no longer selected for today or are marked Keep upstairs.")
                     chosen = st.multiselect(
-                        f"Downstairs players for block {block + 1}", eligible_names,
+                        f"Downstairs players for block {block + 1}", options,
+                        format_func=lambda name, labels=option_labels: labels[name],
                         key=group_key, label_visibility="collapsed",
                         placeholder=f"Choose {downstairs_slots} players",
                     )

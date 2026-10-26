@@ -120,6 +120,20 @@ class ManualDownstairsChecks(unittest.TestCase):
         self.assertEqual({r for r, same, skill in calls if same}, {2, 5})
         self.assertTrue(all(skill for r, same, skill in calls))
 
+    def test_context_lists_unused_first_then_other_block_selections(self):
+        options, labels = self.ns["downstairs_group_choices"](
+            ["Dee", "Aideen", "Chris", "Anna"], [["Aideen"], ["Chris"], ["Aideen"]], 1)
+        self.assertEqual(options, ["Anna", "Chris", "Dee", "Aideen"])
+        self.assertEqual(labels["Chris"], "Chris")  # Selection in this box alone is not a repeat.
+        self.assertEqual(labels["Aideen"], "🔴 Aideen · already in blocks 1, 3")
+        self.assertEqual(labels["Anna"], "Anna")
+
+    def test_context_marking_updates_when_another_block_is_cleared(self):
+        options, labels = self.ns["downstairs_group_choices"](
+            ["Dee", "Aideen", "Chris", "Anna"], [["Aideen"], [], []], 0)
+        self.assertEqual(options, ["Aideen", "Anna", "Chris", "Dee"])
+        self.assertTrue(all(labels[name] == name for name in options))
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
