@@ -408,6 +408,17 @@ def validate_downstairs_limits(players, total_matches, downstairs_slots, limits=
     return stays
 
 
+def validate_manual_court_capacity(n_players, court_names, court_size=4):
+    """Manual groups must use all selected courts, never silently drop one."""
+    required = len(court_names) * court_size
+    if n_players < required:
+        raise ValueError(
+            f"The {len(court_names)} selected courts need at least {required} players, "
+            f"but only {n_players} are selected. Add players or deselect a court "
+            "before using manual downstairs groups."
+        )
+
+
 def validate_downstairs_groups(players, total_matches, downstairs_slots, groups,
                                limits=None, names=None):
     """Validate organiser-selected groups without relaxing any court preference."""
@@ -933,6 +944,8 @@ def assign_matches(names, genders, skills, courts, court_sz=4, total_matches=6,
                    downstairs_groups=None):
     validate_unique_courts(courts)
     n_players = len(names)
+    if downstairs_groups is not None:
+        validate_manual_court_capacity(n_players, courts, court_sz)
     courts_used = determine_courts_to_use(n_players, len(courts), court_sz)
     active_courts = courts[:courts_used]
     down_idx, up_idx = identify_downstairs_courts(active_courts)
@@ -1498,17 +1511,22 @@ def main():
     courts_used = determine_courts_to_use(n_sel, len(courts), 4)
     max_unique  = compute_max_unique_matchups(n_sel, courts_used, 4) if n_sel >= courts_used*4 else 0
     active_down, active_up = identify_downstairs_courts(courts[:courts_used])
-    if active_down:
+    manual_requested = bool(selected_downstairs) and st.session_state.get(
+        "choose_downstairs_groups", st.session_state.get("manual_downstairs_enabled", False)
+    )
+    if active_down and not (manual_requested and courts_used < len(courts)):
         st.caption("Downstairs courts are included automatically in the same schedule, "
                    "in two-match stays. Match times remain 15 minutes apart.")
-    if courts_used < len(courts):
-        st.caption(f"With {n_sel} players, the first {courts_used} selected courts can be filled.")
+    if courts_used < len(courts) and not manual_requested:
+        unused_courts = ", ".join(courts[courts_used:])
+        st.caption(f"With {n_sel} players, the first {courts_used} selected courts can be filled. "
+                   f"Not in use: {unused_courts}.")
 
     st.header("⚙️ Configuration")
     total_matches = st.number_input("🔢 Matches per schedule", 1, value=6)
     num_sched     = st.number_input("🗂 Number of schedules", 1, value=1)
     manual_downstairs_groups = None
-    if active_down:
+    if selected_downstairs:
         if "choose_downstairs_groups" not in st.session_state:
             st.session_state["choose_downstairs_groups"] = st.session_state.get(
                 "manual_downstairs_enabled", False
@@ -1536,9 +1554,9 @@ def main():
             st.caption("Unused players are listed first. 🔴 marks players chosen in another block.")
             highlight_used_group_options()
             downstairs_names = []
-            downstairs_slots = 4 * len(active_down)
+            downstairs_slots = 4 * len(selected_downstairs)
             session_start = datetime.combine(sess_date, sess_time)
-            court_label = ", ".join(courts[i] for i in active_down)
+            court_label = ", ".join(courts[i] for i in selected_downstairs)
             for block in range(block_count):
                 first_round = 2 * block
                 block_rounds = min(2, total_matches - first_round)
@@ -1576,6 +1594,8 @@ def main():
     downstairs_error = None
     try:
         validate_unique_courts(courts)
+        if manual_downstairs_groups is not None:
+            validate_manual_court_capacity(n_sel, courts)
     except ValueError as exc:
         downstairs_error = str(exc)
         st.warning(downstairs_error)

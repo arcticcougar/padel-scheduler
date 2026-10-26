@@ -134,6 +134,22 @@ class ManualDownstairsChecks(unittest.TestCase):
         self.assertEqual(options, ["Aideen", "Anna", "Chris", "Dee"])
         self.assertTrue(all(labels[name] == name for name in options))
 
+    def test_manual_mode_cannot_silently_omit_selected_court_13(self):
+        courts = ["Court 7", "Court 8", "Court 9", "Court 12", "Court 13"]
+        groups = [list(range(8)), list(range(8, 16)), list(range(8))]
+        limits = [4] * 8 + [2] * 11
+        with self.assertRaisesRegex(ValueError, "5 selected courts need at least 20 players"):
+            self.generate(19, courts, groups, limits)
+        courts.remove("Court 9")
+        self.verify_groups(self.generate(19, courts, groups, limits), 19, courts, groups, limits)
+
+    def test_manual_court_capacity_counts_all_selected_courts(self):
+        validate = self.ns["validate_manual_court_capacity"]
+        with self.assertRaisesRegex(ValueError, "2 selected courts need at least 8 players"):
+            validate(7, ["Court 12", "Court 13"])
+        validate(8, ["Court 12", "Court 13"])
+        validate(27, ["Court 7", "Court 8", "Court 9", "Court 10", "Court 12", "Court 13"])
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
