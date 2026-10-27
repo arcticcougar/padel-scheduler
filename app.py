@@ -4,6 +4,7 @@
 ###############################################################################
 import streamlit as st
 import streamlit.components.v1 as components
+import base64
 import itertools
 import numpy as np
 import random
@@ -668,8 +669,8 @@ def format_downstairs_court_icon():
 
 def schedule_background_html():
     """Original, closely packed padel doodles in portable, light-grey vector art."""
-    return """
-    <svg class="sched-doodles" xmlns="http://www.w3.org/2000/svg"
+    svg = """
+    <svg xmlns="http://www.w3.org/2000/svg"
          viewBox="0 0 884 1223" preserveAspectRatio="none" aria-hidden="true" focusable="false">
       <defs>
         <g id="doodle-racket" fill="none" stroke-linecap="round" stroke-linejoin="round">
@@ -738,6 +739,22 @@ def schedule_background_html():
       <rect width="884" height="1223" fill="url(#padel-doodle-tile)"/>
     </svg>
     """
+    # Each image owns its SVG definitions. Browser print engines can otherwise
+    # lose shared pattern/use references on subsequent pages.
+    encoded = base64.b64encode(svg.encode("utf-8")).decode("ascii")
+    return (f'<img class="sched-doodles" src="data:image/svg+xml;base64,{encoded}" '
+            'alt="" aria-hidden="true" draggable="false">')
+
+
+def schedule_pages_html(schedule_html):
+    """Give every existing print page its own artwork, without fixed elements."""
+    pages = schedule_html.split("<div style='page-break-after: always;'></div>")
+    background = schedule_background_html()
+    return "".join(
+        '<section class="sched-page">' + background +
+        '<div class="sched-page-content">' + page + '</div></section>'
+        for page in pages
+    )
 
 
 def format_match_table_html(match_no, groups, court_names, player_names, bench,
@@ -754,10 +771,10 @@ def format_match_table_html(match_no, groups, court_names, player_names, bench,
         <table style="width:100%;border-collapse:collapse;table-layout:fixed;
                       font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;">
           <thead><tr style="background:#f0f0f0;">
-            <th style="width:20%;padding:8px;text-align:left;border-bottom:2px solid #ddd;">Court</th>
-            <th style="width:30%;padding:8px;text-align:left;border-bottom:2px solid #ddd;">Team&nbsp;1</th>
-            <th style="width:10%;padding:8px;text-align:center;border-bottom:2px solid #ddd;">vs</th>
-            <th style="width:30%;padding:8px;text-align:left;border-bottom:2px solid #ddd;">Team&nbsp;2</th>
+            <th style="width:25%;padding:8px;text-align:left;border-bottom:2px solid #ddd;">Court</th>
+            <th style="width:33%;padding:8px;text-align:left;border-bottom:2px solid #ddd;">Team&nbsp;1</th>
+            <th style="width:9%;padding:8px;text-align:center;border-bottom:2px solid #ddd;">vs</th>
+            <th style="width:33%;padding:8px;text-align:left;border-bottom:2px solid #ddd;">Team&nbsp;2</th>
           </tr></thead><tbody>
     """
     for cid, g in enumerate(groups):
@@ -765,13 +782,14 @@ def format_match_table_html(match_no, groups, court_names, player_names, bench,
         t2 = " & ".join(player_names[p] for p in g[2:])
         row_bg = "#ffffff" if cid % 2 == 0 else "#f9f9f9"
         is_down = (downstairs_idx is not None and cid in downstairs_idx)
+        court_label_class = "court-label court-label-downstairs" if is_down else "court-label"
         badge = " <span class='downstairs-badge' style='background:#222;color:#fff;border-radius:6px;padding:2px 6px;font-size:.8em;-webkit-print-color-adjust:exact;print-color-adjust:exact;'>Downstairs</span>" if is_down else ""
         html += f"""
             <tr style="background:{row_bg};">
-              <td style="width:20%;padding:6px;border-bottom:1px solid #ddd;"><span class="court-label"><span>{court_names[cid]}</span>{badge}</span></td>
-              <td style="width:30%;padding:6px;border-bottom:1px solid #ddd;">{t1}</td>
-              <td style="width:10%;padding:6px;border-bottom:1px solid #ddd;text-align:center;">vs</td>
-              <td style="width:30%;padding:6px;border-bottom:1px solid #ddd;">{t2}</td>
+              <td style="width:25%;padding:6px;border-bottom:1px solid #ddd;"><span class="{court_label_class}"><span>{court_names[cid]}</span>{badge}</span></td>
+              <td style="width:33%;padding:6px;border-bottom:1px solid #ddd;">{t1}</td>
+              <td style="width:9%;padding:6px;border-bottom:1px solid #ddd;text-align:center;">vs</td>
+              <td style="width:33%;padding:6px;border-bottom:1px solid #ddd;">{t2}</td>
             </tr>"""
     resting = ", ".join(player_names[p] for p in bench)
     html += f"""
@@ -2016,8 +2034,9 @@ def main():
                 <title>Mijas Padellers Match Schedule - {date_str} (v{s_no+1})</title>
                 <style>
                     body{{font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;background:#fff;color:#000;margin:0;padding:20px;}}
-                    .sched-doodles{{position:fixed;inset:0;width:100%;height:100%;z-index:0;pointer-events:none;}}
-                    .container{{position:relative;z-index:1;}}
+                    .sched-page{{position:relative;isolation:isolate;}}
+                    .sched-doodles{{position:absolute;inset:0;width:100%;height:100%;z-index:0;pointer-events:none;}}
+                    .sched-page-content{{position:relative;z-index:1;}}
                     .sched-heading{{background:transparent;}}
                     table{{width:100%;border-collapse:collapse;margin-bottom:10px;table-layout:fixed;}}
                     th,td{{padding:6px;border:1px solid #ddd;text-align:left;}}
@@ -2031,10 +2050,11 @@ def main():
                     .sched-focus-head{{font-weight:800;font-size:1.05em;margin:0 0 4px 0;}}
                     .sched-focus-body{{margin:0;color:#222;}}
                     .downstairs-badge{{background:#222;color:#fff;border-radius:6px;padding:2px 6px;font-size:.8em;-webkit-print-color-adjust:exact;print-color-adjust:exact;}}
-                    @page{{size:A4;margin:10mm;}}
+                    @page{{size:A4;margin:0;}}
                     @media print{{
                         body{{margin:0;padding:0;font-size:12pt;line-height:1.2;}}
-                        .sched-doodles{{inset:auto;top:-10mm;left:-10mm;width:210mm;height:297mm;}}
+                        .sched-page{{width:210mm;min-height:297mm;padding:10mm;box-sizing:border-box;break-inside:avoid;page-break-inside:avoid;break-after:page;page-break-after:always;}}
+                        .sched-page:last-child{{break-after:auto;page-break-after:auto;}}
                         .match-block{{break-inside:avoid;page-break-inside:avoid;margin:0 3mm 12px!important;border:.75pt solid #888;box-shadow:none!important;border-radius:5px!important;overflow:visible!important;background:#fff!important;}}
                         .match-content{{padding:6px 8px!important;}}
                         .match-title{{font-size:15pt;margin:0 0 5px!important;padding:0;}}
@@ -2044,7 +2064,9 @@ def main():
                         .match-block thead th:nth-child(2),.match-block tbody td:nth-child(2){{text-align:right!important;}}
                         .match-block tr{{break-inside:avoid;background:#fff!important;}}
                         .match-block tfoot td{{font-size:11pt;border-bottom:0!important;}}
-                        .court-label{{display:inline-flex;align-items:center;gap:4px;flex-wrap:wrap;}}
+                        .court-label{{display:inline-flex;align-items:center;gap:4px;flex-wrap:nowrap;}}
+                        .court-label-downstairs{{white-space:nowrap;}}
+                        .court-label-downstairs .downstairs-badge{{flex-shrink:0;}}
                         .sched-title{{font-size:18pt;}}
                         .sched-date{{font-size:12pt;}}
                         .sched-focus{{padding:0;margin:0 3mm 8px;}}
@@ -2052,8 +2074,8 @@ def main():
                         .sched-focus-head,.sched-focus-body{{font-size:11pt;color:#000;}}
                         .downstairs-badge{{background:#fff!important;color:#000!important;border:.6pt solid #555;border-radius:2px;padding:1px 4px!important;font-size:8.5pt!important;line-height:1;white-space:nowrap;-webkit-print-color-adjust:economy;print-color-adjust:economy;}}
                     }}
-                </style></head><body>{schedule_background_html()}<div class='container'>
-                {sched_html}
+                </style></head><body><div class='container'>
+                {schedule_pages_html(sched_html)}
                 </div></body></html>"""
 
                 st.session_state["all_schedules"].append(full_html)
