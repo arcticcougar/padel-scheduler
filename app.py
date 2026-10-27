@@ -1589,6 +1589,10 @@ def main():
             manual_downstairs_groups = [
                 [player_indices[name] for name in group] for group in downstairs_names
             ]
+    else:
+        st.checkbox("Choose downstairs groups myself", disabled=True,
+                    key="choose_downstairs_groups_unavailable")
+        st.caption("Select Court 12 or Court 13 above to choose the downstairs groups.")
     default_samples = int(min(max_unique, 200_000)) if max_unique else 200_000
 
     downstairs_error = None
