@@ -1310,12 +1310,22 @@ def main():
             )
 
 
+    testing_presets = {
+        "18 random regulars + Courts 7–10": (18, [7, 8, 9, 10]),
+        "26 random regulars + Courts 7–10 + 12 & 13": (26, [7, 8, 9, 10, 12, 13]),
+        "22 random regulars + Courts 7–10 + 12": (22, [7, 8, 9, 10, 12]),
+    }
+    previous_testing_presets = {
+        "16 random regulars + Courts 7–10": "26 random regulars + Courts 7–10 + 12 & 13",
+        "18 random regulars + Courts 7–11": "22 random regulars + Courts 7–10 + 12",
+    }
+
     # ---- apply queued Scott testing preset (before widgets) ----
     # We MUST apply this before creating the player/court widgets, otherwise Streamlit
     # will throw when we try to programmatically change widget-backed session_state.
     if st.session_state.get("scott_schedule_testing_request"):
         req = st.session_state.get("scott_schedule_testing_request") or {}
-        preset = req.get("preset")
+        preset = previous_testing_presets.get(req.get("preset"), req.get("preset"))
         seed = int(req.get("seed") or 0)
         rng = random.Random(seed)
 
@@ -1345,12 +1355,9 @@ def main():
 
         # Apply preset selection (or just reset)
         if preset and preset != "Reset selections":
-            n_players = 18
-            court_nums = [7, 8, 9, 10]
-            if str(preset).startswith("16 "):
-                n_players = 16
-            if str(preset).endswith("7–11"):
-                court_nums = [7, 8, 9, 10, 11]
+            n_players, court_nums = testing_presets.get(
+                preset, next(iter(testing_presets.values()))
+            )
 
             n_players = max(0, min(int(n_players), len(REGULAR_PLAYERS)))
             picked_idx = rng.sample(range(len(REGULAR_PLAYERS)), n_players)
@@ -1957,15 +1964,15 @@ def main():
             key="scott_schedule_testing_enabled",
         )
         if scott_testing:
-            preset_options = [
-                "18 random regulars + Courts 7–10",
-                "16 random regulars + Courts 7–10",
-                "18 random regulars + Courts 7–11",
-                "Reset selections",
-            ]
+            preset_options = [*testing_presets, "Reset selections"]
             # Default preset (only used until you pick one)
             if "scott_schedule_testing_preset" not in st.session_state:
                 st.session_state["scott_schedule_testing_preset"] = preset_options[0]
+            else:
+                current_preset = st.session_state["scott_schedule_testing_preset"]
+                st.session_state["scott_schedule_testing_preset"] = previous_testing_presets.get(
+                    current_preset, current_preset
+                )
             preset_choice = render_single_choice_checkbox_grid(
                 title="Testing preset (pick one)",
                 options=preset_options,
