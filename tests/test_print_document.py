@@ -1,4 +1,8 @@
-"""Portable print pages keep artwork and downstairs labels self-contained."""
+"""Portable artwork, screen-page grouping and downstairs label structure.
+
+Actual printed pagination is checked by check_print_pagination.py, including
+paper-size variants; counting HTML wrappers alone cannot detect blank sheets.
+"""
 import base64
 import unittest
 import xml.etree.ElementTree as ET
@@ -27,7 +31,7 @@ class PrintDocumentChecks(unittest.TestCase):
         self.ns = load_source()
         self.ns['base64'] = base64
 
-    def test_each_print_page_owns_a_complete_background(self):
+    def test_each_screen_page_owns_a_complete_background(self):
         marker = "<div style='page-break-after: always;'></div>"
         source_pages = ['<h1>Session</h1>Match 7', 'Focus reminder: Match 10', 'Match 13']
         result = self.ns['schedule_pages_html'](marker.join(source_pages))
@@ -50,7 +54,7 @@ class PrintDocumentChecks(unittest.TestCase):
                     self.assertIn(href.removeprefix('#'), ids)
         self.assertEqual([result.index(p) for p in source_pages], sorted(result.index(p) for p in source_pages))
 
-    def test_one_page_does_not_add_an_empty_second_page(self):
+    def test_single_group_has_one_screen_wrapper(self):
         result = self.ns['schedule_pages_html']('<h1>Session</h1>Match 1')
         self.assertEqual(result.count('class="sched-page"'), 1)
         self.assertEqual(result.count('class="sched-doodles"'), 1)

@@ -667,8 +667,8 @@ def format_downstairs_court_icon():
     )
 
 
-def schedule_background_html():
-    """Original, closely packed padel doodles in portable, light-grey vector art."""
+def schedule_background_data_uri():
+    """Original, closely packed padel doodles as one self-contained image."""
     svg = """
     <svg xmlns="http://www.w3.org/2000/svg"
          viewBox="0 0 884 1223" preserveAspectRatio="none" aria-hidden="true" focusable="false">
@@ -742,12 +742,17 @@ def schedule_background_html():
     # Each image owns its SVG definitions. Browser print engines can otherwise
     # lose shared pattern/use references on subsequent pages.
     encoded = base64.b64encode(svg.encode("utf-8")).decode("ascii")
-    return (f'<img class="sched-doodles" src="data:image/svg+xml;base64,{encoded}" '
+    return f"data:image/svg+xml;base64,{encoded}"
+
+
+def schedule_background_html():
+    """Screen decoration; printing uses the canvas background without layout boxes."""
+    return (f'<img class="sched-doodles" src="{schedule_background_data_uri()}" '
             'alt="" aria-hidden="true" draggable="false">')
 
 
 def schedule_pages_html(schedule_html):
-    """Give every existing print page its own artwork, without fixed elements."""
+    """Group the existing print pages, with self-contained screen decoration."""
     pages = schedule_html.split("<div style='page-break-after: always;'></div>")
     background = schedule_background_html()
     return "".join(
@@ -2052,9 +2057,15 @@ def main():
                     .downstairs-badge{{background:#222;color:#fff;border-radius:6px;padding:2px 6px;font-size:.8em;-webkit-print-color-adjust:exact;print-color-adjust:exact;}}
                     @page{{size:A4;margin:0;}}
                     @media print{{
-                        body{{margin:0;padding:0;font-size:12pt;line-height:1.2;}}
-                        .sched-page{{width:210mm;min-height:297mm;padding:10mm;box-sizing:border-box;break-inside:avoid;page-break-inside:avoid;break-after:page;page-break-after:always;}}
-                        .sched-page:last-child{{break-after:auto;page-break-after:auto;}}
+                        body{{margin:0;padding:0;font-size:12pt;line-height:1.2;
+                            background-image:url("{schedule_background_data_uri()}");background-repeat:repeat;
+                            background-size:210mm 297mm;-webkit-print-color-adjust:exact;print-color-adjust:exact;}}
+                        /* Full-sheet minimum heights and unbreakable wrappers can
+                           overflow smaller printable areas and create blank sheets. */
+                        .sched-page{{position:static;isolation:auto;width:auto;min-height:0;padding:10mm;box-sizing:border-box;break-inside:auto;page-break-inside:auto;}}
+                        .sched-page + .sched-page{{break-before:page;page-break-before:always;}}
+                        .sched-page-content{{position:static;z-index:auto;}}
+                        .sched-doodles{{display:none;}}
                         .match-block{{break-inside:avoid;page-break-inside:avoid;margin:0 3mm 12px!important;border:.75pt solid #888;box-shadow:none!important;border-radius:5px!important;overflow:visible!important;background:#fff!important;}}
                         .match-content{{padding:6px 8px!important;}}
                         .match-title{{font-size:15pt;margin:0 0 5px!important;padding:0;}}
