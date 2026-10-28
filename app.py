@@ -2052,8 +2052,8 @@ def main():
                     .sched-focus{{margin:0 auto 12px auto;max-width:980px;padding:0 28px;box-sizing:border-box;}}
                     .sched-focus-inner{{background:#eef6ff;border:1px solid #cce0ff;border-radius:10px;padding:10px 12px;text-align:center;line-height:1.25;color:#111;}}
                     .sched-focus-inner{{-webkit-print-color-adjust:exact;print-color-adjust:exact;}}
-                    .sched-focus-head{{font-weight:800;font-size:1.05em;margin:0 0 4px 0;}}
-                    .sched-focus-body{{margin:0;color:#222;}}
+                    .sched-focus-head{{font-weight:800;font-size:1.1em;margin:0 0 4px 0;}}
+                    .sched-focus-body{{font-size:1.05em;margin:0;color:#222;}}
                     .downstairs-badge{{background:#222;color:#fff;border-radius:6px;padding:2px 6px;font-size:.8em;-webkit-print-color-adjust:exact;print-color-adjust:exact;}}
                     @page{{size:A4;margin:0;}}
                     @media print{{
@@ -2082,7 +2082,8 @@ def main():
                         .sched-date{{font-size:12pt;}}
                         .sched-focus{{padding:0;margin:0 3mm 8px;}}
                         .sched-focus-inner{{background:#fff!important;border:.6pt solid #777;border-radius:0;padding:6px 8px;color:#000;}}
-                        .sched-focus-head,.sched-focus-body{{font-size:11pt;color:#000;}}
+                        .sched-focus-head{{font-size:12.5pt;color:#000;}}
+                        .sched-focus-body{{font-size:12pt;color:#000;}}
                         .downstairs-badge{{background:#fff!important;color:#000!important;border:.6pt solid #555;border-radius:2px;padding:1px 4px!important;font-size:8.5pt!important;line-height:1;white-space:nowrap;-webkit-print-color-adjust:economy;print-color-adjust:economy;}}
                     }}
                 </style></head><body><div class='container'>
